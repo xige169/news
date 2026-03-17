@@ -28,6 +28,8 @@ ENV/
 # Build artifacts
 build/
 dist/
+node_modules/
+node_modules_bak_20260317/
 *.egg-info/
 .eggs/
 
@@ -41,3 +43,6 @@ dist/
 
 # OS files
 .DS_Store
+
+# Local git worktrees
+.worktrees/

@@ -16,7 +16,7 @@ router = APIRouter(prefix="/api/user", tags=["user"])
 async def register(user_data: UserRequest,db: AsyncSession= Depends(get_db_session)):
     user = await users.get_user_by_username(user_data.username,db)
     if user:
-        return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用户已存在")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用户已存在")
     new_user =await users.create_user(user_data,db)
     token = await users.create_token(new_user.id,db)
     # return {
@@ -39,7 +39,7 @@ async def register(user_data: UserRequest,db: AsyncSession= Depends(get_db_sessi
 async def login(user_data: UserRequest,db: AsyncSession= Depends(get_db_session)):
     user = await users.authenticate_user(user_data.username,user_data.password,db)
     if not user:
-        return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误")
     token = await users.create_token(user.id,db)
 
     response_data = UserAuthResponse(token=token, userInfo=UserInfoResponse.model_validate(user))
@@ -60,7 +60,6 @@ async def update_user_password(user_data: UserUpdatePasswordRequest, user: User 
     if not update_password:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="旧密码错误")
     return success_response(message="密码修改成功")
-
 
 
 

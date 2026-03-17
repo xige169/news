@@ -21,6 +21,7 @@ class HistoryAddResponse(BaseModel):
     )
 
 class HistoryItemResponse(NewsItemBase):
+    history_id: int = Field(..., alias="historyId")
     publish_time: datetime | None = Field(None, alias="publishTime")
     view_time: datetime = Field(..., alias="viewTime")
 

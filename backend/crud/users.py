@@ -14,7 +14,7 @@ async def get_user_by_username(username: str, db: AsyncSession):
     return result.scalar_one_or_none()
 
 async def get_user_by_id(user_id: int, db: AsyncSession):
-    stmt = select(User).where(User.id == int)
+    stmt = select(User).where(User.id == user_id)
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
@@ -40,7 +40,7 @@ async def create_token(user_id: int, db: AsyncSession):
     else:
         user_token = UserToken(user_id=user_id, token=token, expires_at=expires_at)
         db.add(user_token)
-        await db.commit()
+    await db.commit()
     await db.refresh(user_token)
     return token
 
@@ -72,7 +72,7 @@ async def update_user_info(user_data: UserUpdateRequest, user_id: int, db: Async
     await db.commit()
 
     if result.rowcount == 0:
-        return HTTPException(status_code=404, detail="用户不存在")
+        raise HTTPException(status_code=404, detail="用户不存在")
 
     return await get_user_by_id(user_id, db)
 
@@ -85,7 +85,4 @@ async def update_password(old_password: str, new_password: str, user: User,db: A
     await db.commit()
     await db.refresh(user)
     return True
-
-
-
 

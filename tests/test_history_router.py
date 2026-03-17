@@ -74,7 +74,8 @@ async def test_get_history_list_returns_expected_payload(monkeypatch):
                     views=99,
                     publish_time=datetime(2026, 3, 10, 8, 0, 0)
                 ),
-                datetime(2026, 3, 14, 10, 0, 0)
+                datetime(2026, 3, 14, 10, 0, 0),
+                42
             )
         ]
         return rows, 1
@@ -96,8 +97,9 @@ async def test_get_history_list_returns_expected_payload(monkeypatch):
         "message": "获取成功",
         "data": {
             "list": [
-                {
-                    "id": 5,
+                    {
+                        "historyId": 42,
+                        "id": 5,
                     "title": "测试新闻",
                     "description": "简介",
                     "image": "https://example.com/image.jpg",

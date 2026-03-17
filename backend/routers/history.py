@@ -47,9 +47,10 @@ async def get_history_list(
     news_list = [
         HistoryItemResponse.model_validate({
             **news.__dict__,
+            "history_id": history_id,
             "view_time": view_time
         })
-        for news, view_time in rows
+        for news, view_time, history_id in rows
     ]
 
     return success_response(

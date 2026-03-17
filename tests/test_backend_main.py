@@ -1,26 +1,35 @@
 from pathlib import Path
 import sys
 
-from fastapi.testclient import TestClient
+import pytest
 
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from backend.main import app
+import backend.routers.news as news_router
+from backend.main import app, root
 
 
-client = TestClient(app)
+@pytest.mark.asyncio
+async def test_root_endpoint_returns_hello_world():
+    assert await root() == {"message": "Hello World"}
 
 
-def test_root_endpoint_returns_hello_world():
-    response = client.get("/")
+@pytest.mark.asyncio
+async def test_news_categories_endpoint_is_registered(monkeypatch):
+    async def fake_get_categories(db, skip: int, limit: int):
+        assert skip == 0
+        assert limit == 100
+        return [{"id": 1, "name": "要闻"}]
 
-    assert response.status_code == 200
-    assert response.json() == {"message": "Hello World"}
+    monkeypatch.setattr("backend.routers.news.news.get_categories", fake_get_categories)
 
+    route_paths = {route.path for route in app.routes}
+    payload = await news_router.get_categories(db=object())
 
-def test_news_categories_endpoint_is_registered():
-    response = client.get("/api/news/categories")
-
-    assert response.status_code == 200
-    assert response.json() == {"message": "分组成功"}
+    assert "/api/news/categories" in route_paths
+    assert payload == {
+        "code": 200,
+        "message": "success",
+        "data": [{"id": 1, "name": "要闻"}]
+    }
