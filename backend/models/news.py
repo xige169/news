@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -97,6 +97,18 @@ class News(Base):
         default=0,
         comment="浏览量"
     )
+    status: Mapped[str] = mapped_column(
+        Enum("draft", "published", "offline", name="news_status_enum"),
+        nullable=False,
+        default="published",
+        comment="发布状态"
+    )
+    is_featured: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="是否运营推荐"
+    )
     publish_time: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.now,
@@ -107,4 +119,4 @@ class News(Base):
     category: Mapped["Category"] = relationship(back_populates="news_list")
 
     def __repr__(self):
-        return f"<News(id={self.id}, title={self.title}, views={self.views})>"
+        return f"<News(id={self.id}, title={self.title}, views={self.views}, status={self.status})>"

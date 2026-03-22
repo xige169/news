@@ -5,6 +5,7 @@ from starlette import status
 from backend.config.db_conf import get_db_session
 from backend.config import cache_conf
 from backend.crud import users
+from backend.models.users import User
 from backend.utils.jwt import decode_access_token, get_token_ttl
 
 
@@ -43,3 +44,13 @@ async def get_current_user(authorization: str=Header(..., alias="Authorization")
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效令牌或者令牌已过期")
     return  user
+
+
+async def require_admin_user(
+    authorization: str = Header(..., alias="Authorization"),
+    db: AsyncSession = Depends(get_db_session)
+) -> User:
+    user = await get_current_user(authorization=authorization, db=db)
+    if getattr(user, "role", "user") != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="没有管理员权限")
+    return user

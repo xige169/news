@@ -4,7 +4,7 @@ from backend.schemas.users import UserRequest, UserUpdateRequest
 from backend.models.users import User
 from backend.utils import security
 from backend.utils.jwt import create_access_token, create_refresh_token, decode_access_token
-from sqlalchemy import select, update
+from sqlalchemy import func, or_, select, update
 
 async def get_user_by_username(username: str, db: AsyncSession):
     stmt = select(User).where(User.username == username)
@@ -91,3 +91,55 @@ async def update_password(old_password: str, new_password: str, user: User,db: A
     await db.commit()
     await db.refresh(user)
     return True
+
+
+async def list_users(
+    db: AsyncSession,
+    page: int = 1,
+    page_size: int = 10,
+    keyword: str | None = None,
+    role: str | None = None,
+):
+    stmt = select(User)
+    count_stmt = select(func.count(User.id))
+
+    if keyword:
+        pattern = f"%{keyword.strip()}%"
+        condition = or_(
+            User.username.ilike(pattern),
+            User.nickname.ilike(pattern),
+            User.phone.ilike(pattern),
+        )
+        stmt = stmt.where(condition)
+        count_stmt = count_stmt.where(condition)
+
+    if role:
+        stmt = stmt.where(User.role == role)
+        count_stmt = count_stmt.where(User.role == role)
+
+    offset = max(page - 1, 0) * page_size
+    stmt = stmt.order_by(User.created_at.desc(), User.id.desc()).offset(offset).limit(page_size)
+
+    result = await db.execute(stmt)
+    count_result = await db.execute(count_stmt)
+    user_list = result.scalars().all()
+    total = count_result.scalar_one()
+
+    return {
+        "list": user_list,
+        "total": total,
+        "page": page,
+        "pageSize": page_size,
+    }
+
+
+async def update_user_role(db: AsyncSession, user_id: int, role: str):
+    user = await get_user_by_id(user_id, db)
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    user.role = role
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user

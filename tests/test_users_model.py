@@ -17,6 +17,8 @@ def test_user_model_matches_user_table_core_fields():
     assert table.c.nickname.nullable is True
     assert table.c.gender.default.arg == "unknown"
     assert table.c.phone.nullable is True
+    assert table.c.role.nullable is False
+    assert table.c.role.default.arg == "user"
 
 
 def test_user_model_declares_expected_indexes():

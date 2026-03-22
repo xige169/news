@@ -17,6 +17,10 @@ def test_news_model_matches_news_table_core_fields():
     assert table.c.content.nullable is False
     assert table.c.category_id.nullable is False
     assert table.c.views.default.arg == 0
+    assert table.c.status.nullable is False
+    assert table.c.status.default.arg == "published"
+    assert table.c.is_featured.nullable is False
+    assert table.c.is_featured.default.arg is False
     assert "news_category.id" in str(next(iter(table.c.category_id.foreign_keys)).target_fullname)
 
 
