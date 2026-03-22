@@ -30,10 +30,20 @@
 ### 登录页 `/login`
 
 - `POST /api/user/login`
+- 成功后返回 `token`、`accessToken`、`refreshToken`
 
 ### 注册页 `/register`
 
 - `POST /api/user/register`
+- 成功后返回 `token`、`accessToken`、`refreshToken`
+
+### 会话刷新
+
+- `POST /api/user/refresh`
+
+### 退出登录
+
+- `POST /api/user/logout`
 
 ### 首页 `/`
 
@@ -81,7 +91,5 @@
 
 ## 当前未覆盖能力
 
-- 退出登录接口
-- token 刷新
 - 搜索
 - 后台管理

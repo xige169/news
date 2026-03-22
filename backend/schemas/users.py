@@ -23,11 +23,31 @@ class UserInfoResponse(UserInfoBase):
 
 class UserAuthResponse(BaseModel):
     token: str
+    access_token: str = Field(..., alias="accessToken")
+    refresh_token: str = Field(..., alias="refreshToken")
     user_info: UserInfoResponse= Field(..., alias="userInfo")
 
     model_config = ConfigDict(
         populate_by_name=True,
         from_attributes= True
+    )
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str = Field(..., alias="refreshToken")
+
+    model_config = ConfigDict(
+        populate_by_name=True
+    )
+
+
+class TokenPairResponse(BaseModel):
+    token: str
+    access_token: str = Field(..., alias="accessToken")
+    refresh_token: str = Field(..., alias="refreshToken")
+
+    model_config = ConfigDict(
+        populate_by_name=True
     )
 
 class UserUpdateRequest(BaseModel):

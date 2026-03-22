@@ -8,6 +8,7 @@ export class ApiError extends Error {
 
 const runtimeConfig = {
   getToken: () => '',
+  refreshAccessToken: async () => '',
   onUnauthorized: () => {}
 }
 
@@ -31,6 +32,7 @@ const buildHeaders = (headers, token) => {
 export const createApiClient = ({
   fetchImpl = (...args) => globalThis.fetch(...args),
   getToken = () => runtimeConfig.getToken(),
+  refreshAccessToken = (...args) => runtimeConfig.refreshAccessToken(...args),
   onUnauthorized = () => runtimeConfig.onUnauthorized()
 } = {}) => {
   return async (url, options = {}) => {
@@ -49,6 +51,25 @@ export const createApiClient = ({
       ...options,
       headers
     })
+
+    if (response.status === 401 && options.auth !== false && !options._retried) {
+      try {
+        const nextToken = await refreshAccessToken()
+        if (nextToken) {
+          return createApiClient({
+            fetchImpl,
+            getToken: () => nextToken,
+            refreshAccessToken,
+            onUnauthorized
+          })(url, {
+            ...options,
+            _retried: true
+          })
+        }
+      } catch {
+        onUnauthorized()
+      }
+    }
 
     let payload = null
     try {
@@ -76,6 +97,10 @@ export const createApiClient = ({
 export const configureApiClient = (config = {}) => {
   if (typeof config.getToken === 'function') {
     runtimeConfig.getToken = config.getToken
+  }
+
+  if (typeof config.refreshAccessToken === 'function') {
+    runtimeConfig.refreshAccessToken = config.refreshAccessToken
   }
 
   if (typeof config.onUnauthorized === 'function') {

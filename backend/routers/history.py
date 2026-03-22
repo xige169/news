@@ -7,7 +7,6 @@ from backend.schemas.history import (
     HistoryAddRequest,
     HistoryAddResponse,
     HistoryItemResponse,
-    HistoryListResponse,
 )
 from backend.utils import auth
 from backend.crud import history
@@ -49,17 +48,22 @@ async def get_history_list(
             **news.__dict__,
             "history_id": history_id,
             "view_time": view_time
-        })
+        }).model_dump(
+            mode="json",
+            by_alias=True,
+            exclude_none=True,
+            exclude={"summary", "tags", "hot_score"}
+        )
         for news, view_time, history_id in rows
     ]
 
     return success_response(
         message="获取成功",
-        data=HistoryListResponse(
-            list=news_list,
-            total=total,
-            has_more=total > page * page_size
-        )
+        data={
+            "list": news_list,
+            "total": total,
+            "hasMore": total > page * page_size
+        }
     )
 
 @router.delete("/delete/{history_id}")

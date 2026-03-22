@@ -3,6 +3,7 @@ import { defineStore } from 'pinia'
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     token: '',
+    refreshToken: '',
     userInfo: null
   }),
 
@@ -13,7 +14,8 @@ export const useAuthStore = defineStore('auth', {
 
   actions: {
     setAuth(authPayload) {
-      this.token = authPayload?.token || ''
+      this.token = authPayload?.accessToken || authPayload?.token || ''
+      this.refreshToken = authPayload?.refreshToken || ''
       this.userInfo = authPayload?.userInfo || null
     },
 
@@ -23,6 +25,7 @@ export const useAuthStore = defineStore('auth', {
 
     clearAuth() {
       this.token = ''
+      this.refreshToken = ''
       this.userInfo = null
     }
   },

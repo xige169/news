@@ -54,7 +54,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast } from 'vant'
 
-import { fetchCurrentUser } from '../services/auth.js'
+import { fetchCurrentUser, logoutSession } from '../services/auth.js'
 import { useAuthStore } from '../store/auth'
 import { getAvatarUrl } from '../utils/media.js'
 import { toGenderLabel } from '../utils/profile.js'
@@ -74,9 +74,15 @@ const loadProfile = async () => {
   }
 }
 
-const handleLogout = () => {
-  authStore.clearAuth()
-  router.replace('/login')
+const handleLogout = async () => {
+  try {
+    await logoutSession()
+  } catch {
+    // 即使后端登出失败，也要清理本地登录态，避免用户卡死在失效会话中
+  } finally {
+    authStore.clearAuth()
+    router.replace('/login')
+  }
 }
 
 onMounted(async () => {

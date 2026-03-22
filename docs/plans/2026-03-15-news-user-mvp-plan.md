@@ -156,15 +156,13 @@ Expected:
 
 **Files:**
 - Create: `frontend/package.json`
-- Create: `frontend/tsconfig.json`
-- Create: `frontend/vite.config.ts`
+- Create: `frontend/vite.config.js`
 - Create: `frontend/index.html`
-- Create: `frontend/src/main.tsx`
-- Create: `frontend/src/App.tsx`
-- Create: `frontend/src/styles/variables.css`
-- Create: `frontend/src/styles/global.css`
+- Create: `frontend/src/main.js`
+- Create: `frontend/src/App.vue`
+- Create: `frontend/src/style.css`
 
-**Step 1: 使用 Vite 初始化 React + TypeScript 工程**
+**Step 1: 使用 Vite 初始化 Vue 3 工程**
 
 要求：
 - 目录固定为 `frontend/`
@@ -173,8 +171,8 @@ Expected:
 **Step 2: 建立基础依赖**
 
 至少包含：
-- `react-router-dom`
-- `zustand`
+- `vue-router`
+- `pinia`
 - `axios`
 
 **Step 3: 建立全局样式和设计基调**
@@ -194,14 +192,10 @@ Expected:
 ### Task 6: 搭建前端基础骨架
 
 **Files:**
-- Create: `frontend/src/router/index.tsx`
-- Create: `frontend/src/layouts/AppShell.tsx`
-- Create: `frontend/src/components/navigation/Header.tsx`
-- Create: `frontend/src/components/feedback/EmptyState.tsx`
-- Create: `frontend/src/components/feedback/ErrorState.tsx`
-- Create: `frontend/src/stores/authStore.ts`
-- Create: `frontend/src/lib/http.ts`
-- Create: `frontend/src/types/api.ts`
+- Create: `frontend/src/router/index.js`
+- Create: `frontend/src/components/TabBar.vue`
+- Create: `frontend/src/store/auth.js`
+- Create: `frontend/src/services/http.js`
 
 **Step 1: 配置路由**
 
@@ -216,7 +210,7 @@ Expected:
 - `/profile/edit`
 - `/profile/password`
 
-**Step 2: 配置 Axios 拦截器**
+**Step 2: 配置请求封装与鉴权失效处理**
 
 要求：
 - 自动附带 token

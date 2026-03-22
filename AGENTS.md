@@ -1,6 +1,6 @@
 # AGENTS.md
 
-本文件是本仓库的项目级协作说明。任何在本仓库内工作的智能体或开发者，都应优先遵守这里的约定，并以当前代码和运行结果为准。
+以第一性原理从原始需求和问题本质出发，不从惯例和模版出发。不要假设我清楚自己想要什么。动机或者目标不清晰时，停下来讨论。目标清晰但是路径不是最短的，直接告诉我并建议更好的办法。遇到问题追根因，不打补丁。输出说重点，砍掉一切不改变决策的信息。
 
 ## 1. 项目概况
 
@@ -8,11 +8,12 @@
 
 - 后端：FastAPI + SQLAlchemy Async + MySQL + Redis
 - 前端：Vue 3 + Vite + Vant + Pinia + Vue Router
-- 当前目标：完成新闻浏览、用户登录注册、收藏、历史记录、个人资料维护的联调闭环
+- 当前目标：完成新闻浏览、搜索、热门推荐、个性化推荐、JWT 登录鉴权、收藏、历史记录、个人资料维护的联调闭环
 
 当前用户端主要页面：
 
 - `/` 首页
+- `/search` 搜索页
 - `/news/:id` 新闻详情
 - `/login` 登录
 - `/register` 注册
@@ -78,6 +79,8 @@ news/
 
 - 成功响应优先使用 `{ code, message, data }`
 - 鉴权头使用 `Authorization: Bearer <token>`
+- 用户鉴权采用 JWT：登录/注册返回 `token`、`accessToken`、`refreshToken`
+- 受保护请求默认带 `accessToken`，`401` 时前端会尝试调用 `/api/user/refresh`
 - 认证依赖在 `backend/utils/auth.py`
 - 统一异常处理在 `backend/utils/exception.py`
 
@@ -85,6 +88,7 @@ news/
 
 - `gender` 数据库存储的是枚举值：`male`、`female`、`unknown`
 - 新闻、收藏、历史相关接口存在 Redis 缓存依赖
+- JWT 登出通过 Redis 黑名单失效，不要再把鉴权改回数据库 token 查表
 - 不要擅自改接口字段名，尤其是 `newsId`、`historyId`、`page`、`pageSize`、`hasMore`
 
 ## 4. 前端约定
@@ -105,16 +109,11 @@ news/
 
 - 页面组件只处理展示、交互和状态编排
 - API 请求统一走 `services/`
-- `401` 失效统一由 `http.js` + 路由守卫处理
+- `401` 失效优先由 `http.js` 自动刷新 access token 并重试一次，请求仍失败时再清空登录态
 - `showTabBar`、`requiresAuth`、`guestOnly` 等页面行为统一由路由元信息控制
 - 样式保持当前移动端新闻阅读风格，不要无理由改成后台管理风或桌面工作台风格
 
-前端已存在但不作为当前主线的页面：
-
-- `AiChatPage.vue`
-- `MyPage.vue`
-
-如非明确需求，不要围绕这些遗留页面扩展主流程，优先维护当前真实路由入口。
+当前首页已包含搜索入口、热门流、推荐流；如无明确需求，不要再新增无关的遗留页面分支，优先维护当前真实路由入口。
 
 ## 5. 本地运行
 
@@ -126,6 +125,12 @@ news/
 conda run -n normal uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
+或使用容器：
+
+```bash
+docker compose up --build
+```
+
 数据库配置默认在：
 
 - `backend/config/db_conf.py`
@@ -134,11 +139,16 @@ conda run -n normal uvicorn backend.main:app --host 127.0.0.1 --port 8000
 
 - `backend/config/cache_conf.py`
 
+JWT 配置默认在：
+
+- `backend/config/jwt_conf.py`
+
 默认依赖：
 
 - MySQL 本地可用
 - Redis 本地可用
 - 数据库名为 `news_app`
+- 环境变量模板在 `.env.example`
 
 SQL 初始化文件：
 
@@ -201,12 +211,14 @@ npm run build
 联调时至少检查：
 
 1. 注册并登录
-2. 首页加载分类和新闻列表
-3. 打开新闻详情
-4. 收藏与取消收藏
-5. 历史记录生成与删除
-6. 编辑资料
-7. 修改密码
+2. 刷新 token 与退出登录
+3. 首页加载分类、热门推荐和个性化推荐
+4. 搜索页按关键词和分类搜索新闻
+5. 打开新闻详情并查看摘要、标签、相关推荐
+6. 收藏与取消收藏
+7. 历史记录生成与删除
+8. 编辑资料
+9. 修改密码
 
 没有验证结果时，不要声称“已经修复”或“已经联通”。
 
@@ -239,6 +251,8 @@ npm run build
 - `frontend/node_modules/` 不应纳入修改范围
 - 后端用户资料更新依赖数据库枚举约束，错误值会触发数据库异常
 - Redis 不可用时，新闻接口可能出现缓存相关异常或性能抖动
+- Redis 不可用时，JWT 黑名单登出会失效，推荐/热门缓存也会退化
+- 搜索、热门、推荐接口当前基于现有新闻表实时计算，不要误判为独立检索引擎
 - 本地已有服务占用 `8000` 或 `5173` 端口时，不要误判为代码错误，先查进程
 
 ## 9. 协作规则
@@ -258,6 +272,7 @@ npm run build
 3. `docs/plans/2026-03-15-news-user-mvp-contract.md`
 4. `frontend/src/router/index.js`
 5. `backend/main.py`
+6. `README.md`
 
 如果任务涉及具体业务，再按需读：
 

@@ -51,7 +51,7 @@
 ```text
 news/
 ├── backend/                         # FastAPI 后端
-├── frontend/                        # React 前端
+├── frontend/                        # Vue 前端
 ├── tests/                           # 后端测试
 ├── docs/
 │   ├── 01-接口规范文档/
@@ -168,7 +168,7 @@ Vite 已配置开发代理：
 
 对应配置文件：
 
-- [vite.config.ts](/home/xige/project/news/frontend/vite.config.ts)
+- [vite.config.js](/home/xige/project/news/frontend/vite.config.js)
 
 这意味着前端开发时直接请求 `/api/...` 即可，无需手动写死后端完整地址。
 
@@ -187,12 +187,16 @@ conda run -n normal pytest tests -v
 - 测试数量会随仓库演进变化，不要把文档中的通过数写死
 - 以“全部通过且无新增失败”为准
 
-### 6.2 前端测试
+### 6.2 前端服务层契约测试
 
-在 `frontend/` 目录执行：
+在项目根目录执行：
 
 ```bash
-npm test
+node --test frontend/src/services/auth.test.js \
+  frontend/src/services/news.test.js \
+  frontend/src/services/news-detail.test.js \
+  frontend/src/services/profile.test.js \
+  frontend/src/utils/profile.test.js
 ```
 
 ### 6.3 前端构建
@@ -237,7 +241,7 @@ npm run build
 
 - 后端是否运行在 `127.0.0.1:8000`
 - 前端是否通过 `npm run dev -- --host 127.0.0.1 --port 5173` 启动
-- [vite.config.ts](/home/xige/project/news/frontend/vite.config.ts) 的代理配置是否被改动
+- [vite.config.js](/home/xige/project/news/frontend/vite.config.js) 的代理配置是否被改动
 
 ### 8.2 登录后接口返回 `401`
 
@@ -268,7 +272,7 @@ npm run build
 
 1. 跑通数据库、Redis、后端服务
 2. 跑通前端 dev 服务
-3. 执行后端测试和前端测试 / 构建
+3. 执行后端测试、前端服务层契约测试和前端构建
 4. 从首页、详情页开始联调
 5. 再联调登录、收藏、历史、个人中心
 

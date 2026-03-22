@@ -1,0 +1,7 @@
+import os
+
+
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "news-app-dev-secret")
+JWT_ALGORITHM = "HS256"
+JWT_ACCESS_EXPIRE_MINUTES = int(os.getenv("JWT_ACCESS_EXPIRE_MINUTES", "30"))
+JWT_REFRESH_EXPIRE_DAYS = int(os.getenv("JWT_REFRESH_EXPIRE_DAYS", "7"))

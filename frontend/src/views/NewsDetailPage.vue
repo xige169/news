@@ -38,6 +38,16 @@
 
     <section class="section-card">
       <div class="section-header">
+        <h2>摘要与标签</h2>
+      </div>
+      <p class="detail-summary">{{ detail.summary || detail.description || '暂无摘要内容' }}</p>
+      <div class="topic-tags" v-if="detail.tags?.length">
+        <span v-for="tag in detail.tags" :key="tag" class="topic-tag">{{ tag }}</span>
+      </div>
+    </section>
+
+    <section class="section-card">
+      <div class="section-header">
         <h2>正文</h2>
       </div>
       <p class="detail-content">{{ detail.content || '暂无正文内容' }}</p>
@@ -62,7 +72,10 @@
           />
           <div class="news-copy">
             <h3>{{ item.title }}</h3>
-            <p>{{ item.content || '暂无摘要' }}</p>
+            <p>{{ item.summary || item.description || item.content || '暂无摘要' }}</p>
+            <div class="topic-tags" v-if="item.tags?.length">
+              <span v-for="tag in item.tags" :key="tag" class="topic-tag">{{ tag }}</span>
+            </div>
           </div>
         </article>
       </div>

@@ -11,6 +11,7 @@ import ProfileEditPage from '../views/ProfileEditPage.vue'
 import ProfilePage from '../views/ProfilePage.vue'
 import ProfilePasswordPage from '../views/ProfilePasswordPage.vue'
 import RegisterPage from '../views/RegisterPage.vue'
+import SearchPage from '../views/SearchPage.vue'
 
 const routes = [
   {
@@ -28,6 +29,15 @@ const routes = [
     component: NewsDetailPage,
     meta: {
       title: '新闻详情'
+    }
+  },
+  {
+    path: '/search',
+    name: 'search',
+    component: SearchPage,
+    meta: {
+      title: '搜索',
+      showTabBar: true
     }
   },
   {

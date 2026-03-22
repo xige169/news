@@ -15,7 +15,7 @@ http://localhost:8000
 大部分接口需要认证，认证通过在请求头中添加 `Authorization` 字段实现：
 
 ```
-Authorization: token值
+Authorization: Bearer <JWT>
 ```
 
 ## 响应格式
@@ -60,7 +60,9 @@ Authorization: token值
   "code": 200,
   "message": "注册成功",
   "data": {
-    "token": "用户访问令牌",
+    "token": "访问令牌兼容字段",
+    "accessToken": "JWT访问令牌",
+    "refreshToken": "JWT刷新令牌",
     "userInfo": {
       "id": 1,
       "username": "example_user",
@@ -97,7 +99,9 @@ Authorization: token值
   "code": 200,
   "message": "登录成功",
   "data": {
-    "token": "用户访问令牌",
+    "token": "访问令牌兼容字段",
+    "accessToken": "JWT访问令牌",
+    "refreshToken": "JWT刷新令牌",
     "userInfo": {
       "id": 1,
       "username": "example_user",
@@ -106,6 +110,51 @@ Authorization: token值
       "bio": "这个人很懒，什么都没留下"
     }
   }
+}
+```
+
+#### 3.1 刷新令牌
+
+- **接口地址**: `POST /api/user/refresh`
+- **请求参数**:
+
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| refreshToken | string | 是 | JWT刷新令牌 |
+
+- **请求示例**:
+
+```json
+{
+  "refreshToken": "jwt_refresh_token"
+}
+```
+
+- **响应示例**:
+
+```json
+{
+  "code": 200,
+  "message": "刷新令牌成功",
+  "data": {
+    "token": "访问令牌兼容字段",
+    "accessToken": "新的JWT访问令牌",
+    "refreshToken": "新的JWT刷新令牌"
+  }
+}
+```
+
+#### 3.2 退出登录
+
+- **接口地址**: `POST /api/user/logout`
+- **请求头**: 需要认证
+- **响应示例**:
+
+```json
+{
+  "code": 200,
+  "message": "退出登录成功",
+  "data": null
 }
 ```
 

@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
 from backend.models.users import User
-from backend.schemas.users import UserRequest, UserAuthResponse, UserInfoResponse, UserUpdateRequest, \
+from backend.schemas.users import RefreshTokenRequest, TokenPairResponse, UserRequest, UserAuthResponse, UserInfoResponse, UserUpdateRequest, \
     UserUpdatePasswordRequest
 from backend.config.db_conf import get_db_session
 from backend.crud import users
@@ -18,7 +18,7 @@ async def register(user_data: UserRequest,db: AsyncSession= Depends(get_db_sessi
     if user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用户已存在")
     new_user =await users.create_user(user_data,db)
-    token = await users.create_token(new_user.id,db)
+    tokens = await users.create_auth_tokens(new_user.id)
     # return {
     #   "code": 200,
     #   "message": "注册成功",
@@ -32,7 +32,7 @@ async def register(user_data: UserRequest,db: AsyncSession= Depends(get_db_sessi
     #     }
     #   }
     # }
-    response_data = UserAuthResponse(token=token,user_info= UserInfoResponse.model_validate(new_user))
+    response_data = UserAuthResponse(user_info=UserInfoResponse.model_validate(new_user), **tokens)
     return success_response(message="注册成功",data=response_data)
 
 @router.post("/login")
@@ -40,10 +40,28 @@ async def login(user_data: UserRequest,db: AsyncSession= Depends(get_db_session)
     user = await users.authenticate_user(user_data.username,user_data.password,db)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误")
-    token = await users.create_token(user.id,db)
-
-    response_data = UserAuthResponse(token=token, userInfo=UserInfoResponse.model_validate(user))
+    tokens = await users.create_auth_tokens(user.id)
+    response_data = UserAuthResponse(userInfo=UserInfoResponse.model_validate(user), **tokens)
     return success_response(message="登录成功啦",data=response_data)
+
+
+@router.post("/refresh")
+async def refresh_token(payload: RefreshTokenRequest, db: AsyncSession = Depends(get_db_session)):
+    tokens = await users.refresh_auth_tokens(payload.refresh_token, db)
+    if not tokens:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效令牌或者令牌已过期")
+    return success_response(message="刷新令牌成功", data=TokenPairResponse(**tokens))
+
+
+@router.post("/logout")
+async def logout(
+    authorization: str = Header(..., alias="Authorization"),
+    user: User = Depends(auth.get_current_user),
+):
+    parts = authorization.split(" ", 1)
+    token = parts[1] if len(parts) == 2 else ""
+    await auth.blacklist_token(token)
+    return success_response(message="退出登录成功")
 
 @router.get("/info")
 async def get_user_info(user: User = Depends(auth.get_current_user)):
@@ -60,7 +78,6 @@ async def update_user_password(user_data: UserUpdatePasswordRequest, user: User 
     if not update_password:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="旧密码错误")
     return success_response(message="密码修改成功")
-
 
 
 

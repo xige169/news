@@ -6,6 +6,17 @@
       <p class="hero-subtitle">
         以栏目切换、编辑推荐和即时阅读为核心，串起新闻、收藏、历史和个人资料。
       </p>
+      <form class="hero-search" @submit.prevent="openSearchPage">
+        <input
+          v-model.trim="searchKeyword"
+          class="search-input search-input--hero"
+          type="search"
+          placeholder="搜索今日议题、公司、人物"
+        />
+        <button class="hero-button hero-button--primary click-effect" type="submit">
+          搜索新闻
+        </button>
+      </form>
       <div class="hero-actions">
         <button class="hero-button hero-button--primary click-effect" type="button" @click="openPrimaryAction">
           {{ authStore.isLoggedIn ? '查看我的资料' : '立即登录' }}
@@ -37,7 +48,8 @@
 
     <section class="section-card">
       <div class="section-header">
-        <h2>编辑推荐</h2>
+        <h2>为你推荐</h2>
+        <span class="section-hint">{{ recommendSourceLabel }}</span>
       </div>
       <article class="feature-card click-effect" role="button" tabindex="0" @click="goToDetail(featuredNews.id)">
         <van-image
@@ -52,6 +64,36 @@
         </div>
         <span class="feature-tag">{{ featuredNews.tag }}</span>
       </article>
+    </section>
+
+    <section class="section-card">
+      <div class="section-header">
+        <h2>热门追踪</h2>
+        <span class="section-hint">全站热度排行</span>
+      </div>
+      <div v-if="hotNews.length" class="news-list">
+        <article
+          v-for="item in hotNews"
+          :key="item.id"
+          class="news-card click-effect"
+          @click="goToDetail(item.id)"
+        >
+          <van-image
+            class="news-cover"
+            fit="cover"
+            radius="14"
+            :src="item.image"
+          />
+          <div class="news-copy">
+            <h3>{{ item.title }}</h3>
+            <p>{{ item.summary }}</p>
+            <div class="topic-tags" v-if="item.tags.length">
+              <span v-for="tag in item.tags" :key="tag" class="topic-tag">{{ tag }}</span>
+            </div>
+          </div>
+        </article>
+      </div>
+      <p v-else class="preference-copy">暂无热门新闻</p>
     </section>
 
     <section class="section-card">
@@ -77,6 +119,9 @@
           <div class="news-copy">
             <h3>{{ item.title }}</h3>
             <p>{{ item.summary }}</p>
+            <div class="topic-tags" v-if="item.tags.length">
+              <span v-for="tag in item.tags" :key="tag" class="topic-tag">{{ tag }}</span>
+            </div>
             <div class="news-meta">
               <span>{{ item.source }}</span>
               <span>{{ item.time }}</span>
@@ -103,7 +148,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { showToast } from 'vant'
 
-import { fetchCategories, fetchNewsList } from '../services/news.js'
+import { fetchCategories, fetchHotNews, fetchNewsList, fetchRecommendedNews } from '../services/news.js'
 import { useAuthStore } from '../store/auth'
 import { getNewsImageUrl } from '../utils/media.js'
 import { mergeNewsPage, resetPaginationState } from '../utils/news-pagination.js'
@@ -114,6 +159,10 @@ const authStore = useAuthStore()
 const categories = ref([])
 const activeCategory = ref(null)
 const newsList = ref([])
+const hotNews = ref([])
+const recommendedNews = ref([])
+const recommendSource = ref('hot')
+const searchKeyword = ref('')
 const isLoading = ref(false)
 const isLoadingMore = ref(false)
 const currentPage = ref(1)
@@ -136,10 +185,11 @@ const formatDate = (value) => {
 const formatNewsItem = (item) => ({
   id: item.id,
   title: item.title,
-  summary: item.description || '暂无摘要',
+  summary: item.summary || item.description || '暂无摘要',
   image: getNewsImageUrl(item.image),
   source: item.author || '未知来源',
-  time: formatDate(item.publishTime)
+  time: formatDate(item.publishTime),
+  tags: item.tags || []
 })
 
 const loadNewsList = async (categoryId, page = 1) => {
@@ -186,8 +236,15 @@ const loadNewsList = async (categoryId, page = 1) => {
 
 const loadHomePage = async () => {
   try {
-    const categoryList = await fetchCategories()
+    const [categoryList, hotPayload, recommendPayload] = await Promise.all([
+      fetchCategories(),
+      fetchHotNews({ page: 1, pageSize: 3 }),
+      fetchRecommendedNews({ page: 1, pageSize: 3 })
+    ])
     categories.value = categoryList
+    hotNews.value = hotPayload.list.map(formatNewsItem)
+    recommendedNews.value = recommendPayload.list.map(formatNewsItem)
+    recommendSource.value = recommendPayload.source || 'hot'
 
     if (!activeCategory.value) {
       activeCategory.value = categoryList[0]?.id ?? null
@@ -198,24 +255,28 @@ const loadHomePage = async () => {
 }
 
 const featuredNews = computed(() => {
-  if (newsList.value.length === 0) {
+  if (recommendedNews.value.length === 0) {
     return {
       id: null,
       title: '暂无推荐内容',
-      summary: isLoading.value ? '正在加载新闻内容。' : '当前分类下还没有可展示的新闻。',
+      summary: isLoading.value ? '正在加载新闻内容。' : '当前暂无可展示的推荐内容。',
       image: getNewsImageUrl(''),
       tag: '提示'
     }
   }
 
   return {
-    id: newsList.value[0].id,
-    title: newsList.value[0].title,
-    summary: newsList.value[0].summary,
-    image: newsList.value[0].image,
-    tag: '推荐'
+    id: recommendedNews.value[0].id,
+    title: recommendedNews.value[0].title,
+    summary: recommendedNews.value[0].summary,
+    image: recommendedNews.value[0].image,
+    tag: recommendSource.value === 'personalized' ? '为你推荐' : '热门推荐'
   }
 })
+
+const recommendSourceLabel = computed(() => (
+  recommendSource.value === 'personalized' ? '结合你的阅读轨迹' : '基于全站热度'
+))
 
 const goToDetail = (id) => {
   if (!id) {
@@ -227,6 +288,13 @@ const goToDetail = (id) => {
 
 const openPrimaryAction = () => {
   router.push(authStore.isLoggedIn ? '/profile' : '/login')
+}
+
+const openSearchPage = () => {
+  router.push({
+    path: '/search',
+    query: searchKeyword.value ? { q: searchKeyword.value } : {}
+  })
 }
 
 const refreshCurrentCategory = async () => {

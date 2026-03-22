@@ -1,10 +1,29 @@
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, update
+from sqlalchemy import select, func, update, or_
 from backend.models.news import Category
 from backend.models.news import News
+from backend.models.history import History
+from backend.models.favorite import Favorite
 from backend.cache import news_cache
-from backend.schemas.base import NewsItemBase
+from backend.schemas.base import NewsItemBase, build_summary, build_tags
+
+
+def _serialize_news_item(item, hot_score: float | None = None):
+    payload = {
+        "id": item.id,
+        "title": item.title,
+        "description": item.description,
+        "summary": build_summary(item.description, getattr(item, "content", None)),
+        "image": item.image,
+        "author": item.author,
+        "tags": build_tags(item.title, item.author, item.description),
+        "categoryId": item.category_id,
+        "views": item.views,
+        "hotScore": hot_score,
+        "publishTime": item.publish_time,
+    }
+    return NewsItemBase.model_validate(payload)
 
 async def get_categories(db: AsyncSession ,skip: int = 0, limit: int = 100):
     categories = await news_cache.get_categories_cache()
@@ -27,7 +46,7 @@ async def get_news_list(db: AsyncSession, category_id: int, skip: int= 0, limit:
     stmt = select(News).where(News.category_id == category_id).order_by(News.views.desc(), News.publish_time.desc()).offset(skip).limit(limit)
     result = await db.execute(stmt)
     news_list = result.scalars().all()
-    news_list_items = [NewsItemBase.model_validate(item) for item in news_list]
+    news_list_items = [_serialize_news_item(item, hot_score=float(item.views)) for item in news_list]
     news_list_data = [item.model_dump(mode="json", by_alias=False) for item in news_list_items]
     await news_cache.set_news_list_cache(category_id, page, limit, news_list_data)
     return news_list_items
@@ -89,12 +108,118 @@ async def get_news_recommend(db: AsyncSession, news_id: int, category_id: int, l
     news_recommend_data = [{
         "id": news_detail.id,
         "title": news_detail.title,
+        "description": getattr(news_detail, "description", None),
+        "summary": build_summary(getattr(news_detail, "description", None), news_detail.content),
         "content": news_detail.content,
         "image": news_detail.image,
         "author": news_detail.author,
+        "tags": build_tags(news_detail.title, news_detail.author, getattr(news_detail, "description", None)),
         "publishTime": news_detail.publish_time,
         "categoryId": news_detail.category_id,
-        "views": news_detail.views
+        "views": news_detail.views,
+        "hotScore": float(news_detail.views)
     } for news_detail in news_recommend_list]
     await news_cache.set_news_recommend_cache(category_id, news_id, limit, jsonable_encoder(news_recommend_data))
     return news_recommend_data
+
+
+async def search_news(db: AsyncSession, keyword: str, category_id: int | None = None, skip: int = 0, limit: int = 10):
+    pattern = f"%{keyword.strip()}%"
+    conditions = [
+        or_(
+            News.title.ilike(pattern),
+            News.description.ilike(pattern),
+            News.content.ilike(pattern),
+            News.author.ilike(pattern),
+        )
+    ]
+    if category_id is not None:
+        conditions.append(News.category_id == category_id)
+
+    stmt = (
+        select(News)
+        .where(*conditions)
+        .order_by(News.publish_time.desc(), News.views.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    count_stmt = select(func.count(News.id)).where(*conditions)
+    result = await db.execute(stmt)
+    count_result = await db.execute(count_stmt)
+    news_list = result.scalars().all()
+    total = count_result.scalar_one()
+    return [_serialize_news_item(item, hot_score=float(item.views)) for item in news_list], total
+
+
+async def get_hot_news(db: AsyncSession, skip: int = 0, limit: int = 10):
+    stmt = (
+        select(News)
+        .order_by(News.views.desc(), News.publish_time.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    count_stmt = select(func.count(News.id))
+    result = await db.execute(stmt)
+    count_result = await db.execute(count_stmt)
+    news_list = result.scalars().all()
+    total = count_result.scalar_one()
+    return [_serialize_news_item(item, hot_score=float(item.views)) for item in news_list], total
+
+
+async def get_personalized_news(db: AsyncSession, user_id: int, skip: int = 0, limit: int = 10):
+    favorite_stmt = (
+        select(News.category_id, Favorite.news_id)
+        .join(Favorite, Favorite.news_id == News.id)
+        .where(Favorite.user_id == user_id)
+    )
+    history_stmt = (
+        select(News.category_id, History.news_id)
+        .join(History, History.news_id == News.id)
+        .where(History.user_id == user_id)
+    )
+    favorite_result = await db.execute(favorite_stmt)
+    history_result = await db.execute(history_stmt)
+    favorite_rows = favorite_result.all()
+    history_rows = history_result.all()
+
+    category_scores: dict[int, float] = {}
+    excluded_news_ids = {news_id for _, news_id in history_rows}
+
+    for category_id, _ in favorite_rows:
+        category_scores[category_id] = category_scores.get(category_id, 0.0) + 3.0
+    for category_id, _ in history_rows:
+        category_scores[category_id] = category_scores.get(category_id, 0.0) + 1.0
+
+    if not category_scores:
+        return await get_hot_news(db, skip=skip, limit=limit)
+
+    candidate_stmt = select(News)
+    if excluded_news_ids:
+        candidate_stmt = candidate_stmt.where(News.id.not_in(excluded_news_ids))
+
+    candidate_stmt = candidate_stmt.order_by(News.publish_time.desc(), News.views.desc()).limit(max(limit * 4, 20))
+    count_stmt = select(func.count(News.id))
+    if excluded_news_ids:
+        count_stmt = count_stmt.where(News.id.not_in(excluded_news_ids))
+
+    candidate_result = await db.execute(candidate_stmt)
+    count_result = await db.execute(count_stmt)
+    candidates = candidate_result.scalars().all()
+    total = count_result.scalar_one()
+
+    ranked = sorted(
+        candidates,
+        key=lambda item: (
+            category_scores.get(item.category_id, 0.0) * 1000 + item.views,
+            item.publish_time,
+        ),
+        reverse=True,
+    )
+    paged = ranked[skip: skip + limit]
+    return [
+        _serialize_news_item(
+            item,
+            hot_score=category_scores.get(item.category_id, 0.0) * 1000 + float(item.views),
+        )
+        for item in paged
+    ], total
