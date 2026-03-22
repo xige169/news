@@ -71,6 +71,12 @@ class User(Base):
         unique=True,
         comment="手机号"
     )
+    role: Mapped[str] = mapped_column(
+        Enum("user", "admin", name="user_role_enum"),
+        nullable=False,
+        default="user",
+        comment="用户角色"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=datetime.now,
@@ -86,7 +92,7 @@ class User(Base):
     )
 
     def __repr__(self):
-        return f"<User(id={self.id}, username={self.username})>"
+        return f"<User(id={self.id}, username={self.username}, role={self.role})>"
 
 
 class UserToken(Base):

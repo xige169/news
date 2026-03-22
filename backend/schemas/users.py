@@ -1,6 +1,8 @@
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, ConfigDict
+
+UserRole = Literal["user", "admin"]
 
 
 class UserRequest(BaseModel):
@@ -16,6 +18,7 @@ class UserInfoBase(BaseModel):
 class UserInfoResponse(UserInfoBase):
     id: int
     username: str
+    role: UserRole = Field(default="user")
     model_config = ConfigDict(
         populate_by_name=True,
         from_attributes=True
@@ -60,3 +63,7 @@ class UserUpdateRequest(BaseModel):
 class UserUpdatePasswordRequest(BaseModel):
     old_password: str = Field(...,max_length=255,alias="oldPassword",description="旧密码")
     new_password: str = Field(...,max_length=255,alias="newPassword",description="新密码")
+
+
+class UserRoleUpdateRequest(BaseModel):
+    role: UserRole = Field(..., description="用户角色")
