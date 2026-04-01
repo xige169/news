@@ -8,6 +8,8 @@ from backend.models.favorite import Favorite
 from backend.cache import news_cache
 from backend.schemas.base import NewsItemBase, build_summary, build_tags
 
+PUBLISHED_STATUS = "published"
+
 
 def _serialize_news_item(item, hot_score: float | None = None):
     payload = {
@@ -25,6 +27,16 @@ def _serialize_news_item(item, hot_score: float | None = None):
     }
     return NewsItemBase.model_validate(payload)
 
+
+def _serialize_news_cache_item(item, hot_score: float | None = None):
+    payload = _serialize_news_item(item, hot_score=hot_score).model_dump(mode="json", by_alias=False)
+    payload["status"] = getattr(item, "status", PUBLISHED_STATUS)
+    return payload
+
+
+def _is_published_cache_item(item: dict) -> bool:
+    return item.get("status") == PUBLISHED_STATUS
+
 async def get_categories(db: AsyncSession ,skip: int = 0, limit: int = 100):
     categories = await news_cache.get_categories_cache()
     if categories is not None:
@@ -40,14 +52,20 @@ async def get_categories(db: AsyncSession ,skip: int = 0, limit: int = 100):
 async def get_news_list(db: AsyncSession, category_id: int, skip: int= 0, limit: int =10):
     page =(skip//limit) + 1
     news_list = await news_cache.get_news_list_cache(category_id, page, limit)
-    if news_list is not None:
+    if news_list is not None and all(_is_published_cache_item(item) for item in news_list):
         return [NewsItemBase.model_validate(item) for item in news_list]
 
-    stmt = select(News).where(News.category_id == category_id).order_by(News.views.desc(), News.publish_time.desc()).offset(skip).limit(limit)
+    stmt = (
+        select(News)
+        .where(News.category_id == category_id, News.status == PUBLISHED_STATUS)
+        .order_by(News.views.desc(), News.publish_time.desc())
+        .offset(skip)
+        .limit(limit)
+    )
     result = await db.execute(stmt)
     news_list = result.scalars().all()
     news_list_items = [_serialize_news_item(item, hot_score=float(item.views)) for item in news_list]
-    news_list_data = [item.model_dump(mode="json", by_alias=False) for item in news_list_items]
+    news_list_data = [_serialize_news_cache_item(item, hot_score=float(item.views)) for item in news_list]
     await news_cache.set_news_list_cache(category_id, page, limit, news_list_data)
     return news_list_items
 
@@ -56,7 +74,7 @@ async def get_news_count(db: AsyncSession, category_id: int):
     if cached_count is not None:
         return cached_count
 
-    stmt = select(func.count(News.id)).where(News.category_id == category_id)
+    stmt = select(func.count(News.id)).where(News.category_id == category_id, News.status == PUBLISHED_STATUS)
     result = await db.execute(stmt)
     count = result.scalar_one()
     await news_cache.set_news_count_cache(category_id, count)
@@ -64,10 +82,10 @@ async def get_news_count(db: AsyncSession, category_id: int):
 
 async def get_news_detail(db: AsyncSession, news_id: int):
     cached_detail = await news_cache.get_news_detail_cache(news_id)
-    if cached_detail is not None:
+    if cached_detail is not None and cached_detail.get("status") == PUBLISHED_STATUS:
         return News(**cached_detail)
 
-    stmt = select(News).where(News.id == news_id)
+    stmt = select(News).where(News.id == news_id, News.status == PUBLISHED_STATUS)
     result = await db.execute(stmt)
     news_detail = result.scalar_one_or_none()
     if news_detail is not None:
@@ -98,27 +116,21 @@ async def get_news_recommend(db: AsyncSession, news_id: int, category_id: int, l
 
     stmt = select(News).where(
         News.id != news_id,
-        News.category_id == category_id
+        News.category_id == category_id,
+        News.status == PUBLISHED_STATUS,
     ).order_by(
         News.views.desc(),
         News.publish_time.desc()
     ).limit(limit)
     result = await db.execute(stmt)
     news_recommend_list = result.scalars().all()
-    news_recommend_data = [{
-        "id": news_detail.id,
-        "title": news_detail.title,
-        "description": getattr(news_detail, "description", None),
-        "summary": build_summary(getattr(news_detail, "description", None), news_detail.content),
-        "content": news_detail.content,
-        "image": news_detail.image,
-        "author": news_detail.author,
-        "tags": build_tags(news_detail.title, news_detail.author, getattr(news_detail, "description", None)),
-        "publishTime": news_detail.publish_time,
-        "categoryId": news_detail.category_id,
-        "views": news_detail.views,
-        "hotScore": float(news_detail.views)
-    } for news_detail in news_recommend_list]
+    news_recommend_data = [
+        {
+            **_serialize_news_cache_item(news_detail, hot_score=float(news_detail.views)),
+            "content": news_detail.content,
+        }
+        for news_detail in news_recommend_list
+    ]
     await news_cache.set_news_recommend_cache(category_id, news_id, limit, jsonable_encoder(news_recommend_data))
     return news_recommend_data
 
@@ -135,6 +147,7 @@ async def search_news(db: AsyncSession, keyword: str, category_id: int | None = 
     ]
     if category_id is not None:
         conditions.append(News.category_id == category_id)
+    conditions.append(News.status == PUBLISHED_STATUS)
 
     stmt = (
         select(News)
@@ -154,11 +167,12 @@ async def search_news(db: AsyncSession, keyword: str, category_id: int | None = 
 async def get_hot_news(db: AsyncSession, skip: int = 0, limit: int = 10):
     stmt = (
         select(News)
+        .where(News.status == PUBLISHED_STATUS)
         .order_by(News.views.desc(), News.publish_time.desc())
         .offset(skip)
         .limit(limit)
     )
-    count_stmt = select(func.count(News.id))
+    count_stmt = select(func.count(News.id)).where(News.status == PUBLISHED_STATUS)
     result = await db.execute(stmt)
     count_result = await db.execute(count_stmt)
     news_list = result.scalars().all()
@@ -193,12 +207,12 @@ async def get_personalized_news(db: AsyncSession, user_id: int, skip: int = 0, l
     if not category_scores:
         return await get_hot_news(db, skip=skip, limit=limit)
 
-    candidate_stmt = select(News)
+    candidate_stmt = select(News).where(News.status == PUBLISHED_STATUS)
     if excluded_news_ids:
         candidate_stmt = candidate_stmt.where(News.id.not_in(excluded_news_ids))
 
     candidate_stmt = candidate_stmt.order_by(News.publish_time.desc(), News.views.desc()).limit(max(limit * 4, 20))
-    count_stmt = select(func.count(News.id))
+    count_stmt = select(func.count(News.id)).where(News.status == PUBLISHED_STATUS)
     if excluded_news_ids:
         count_stmt = count_stmt.where(News.id.not_in(excluded_news_ids))
 

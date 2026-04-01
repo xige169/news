@@ -32,6 +32,12 @@ async def delete_news_list_cache(category_id: Optional[int]):
     return await cache_conf.delete_cache_pattern(pattern)
 
 
+async def delete_news_count_cache(category_id: Optional[int]):
+    category_id = category_id if category_id is not None else "all"
+    key = f"{NEWS_COUNT_PREFIX}{category_id}"
+    return await cache_conf.delete_cache(key)
+
+
 async def get_news_count_cache(category_id: Optional[int]):
     category_id = category_id if category_id is not None else "all"
     key = f"{NEWS_COUNT_PREFIX}{category_id}"

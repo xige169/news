@@ -14,6 +14,7 @@ from backend.schemas.base import build_summary
 async def _invalidate_news_cache(news: News):
     await news_cache.delete_news_detail_cache(news.id)
     await news_cache.delete_news_list_cache(news.category_id)
+    await news_cache.delete_news_count_cache(news.category_id)
     await news_cache.delete_news_recommend_cache_by_category(news.category_id)
 
 
@@ -140,6 +141,7 @@ async def update_news(db: AsyncSession, news_id: int, payload: AdminNewsUpdateRe
     await _invalidate_news_cache(news)
     if old_category_id != news.category_id:
         await news_cache.delete_news_list_cache(old_category_id)
+        await news_cache.delete_news_count_cache(old_category_id)
         await news_cache.delete_news_recommend_cache_by_category(old_category_id)
     return _serialize_news(news)
 
@@ -169,5 +171,6 @@ async def delete_news(db: AsyncSession, news_id: int):
     await db.commit()
     await news_cache.delete_news_detail_cache(news_id)
     await news_cache.delete_news_list_cache(category_id)
+    await news_cache.delete_news_count_cache(category_id)
     await news_cache.delete_news_recommend_cache_by_category(category_id)
     return True

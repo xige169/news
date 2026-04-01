@@ -12,8 +12,11 @@ from backend.crud.news import (
     get_categories,
     get_news_count,
     get_news_detail,
+    get_hot_news,
     get_news_list,
+    get_personalized_news,
     get_news_recommend,
+    search_news,
     update_news_views,
 )
 from backend.cache.news_cache import get_news_list_cache
@@ -75,6 +78,16 @@ class DummyUpdateSession:
         self.committed = True
 
 
+class DummyMultiExecuteSession:
+    def __init__(self, rows):
+        self.rows = list(rows)
+        self.statements = []
+
+    async def execute(self, statement):
+        self.statements.append(statement)
+        return DummyResult(self.rows.pop(0))
+
+
 @pytest.mark.asyncio
 async def test_get_news_list_uses_cache_before_database(monkeypatch):
     cached_rows = [
@@ -87,6 +100,7 @@ async def test_get_news_list_uses_cache_before_database(monkeypatch):
             "author": "tester",
             "category_id": 2,
             "views": 120,
+            "status": "published",
             "publish_time": "2026-03-14T09:00:00",
         }
     ]
@@ -208,6 +222,26 @@ async def test_get_news_list_populates_cache_after_database_query(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_get_news_list_only_queries_published_news(monkeypatch):
+    async def fake_get_news_list_cache(category_id: int, page: int, page_size: int):
+        return None
+
+    async def fake_set_news_list_cache(*args, **kwargs):
+        return True
+
+    monkeypatch.setattr("backend.crud.news.news_cache.get_news_list_cache", fake_get_news_list_cache)
+    monkeypatch.setattr("backend.crud.news.news_cache.set_news_list_cache", fake_set_news_list_cache)
+
+    session = DummySession(rows=[])
+
+    await get_news_list(session, category_id=3, skip=0, limit=10)
+
+    compiled = session.statement.compile()
+    assert compiled.params["category_id_1"] == 3
+    assert compiled.params["status_1"] == "published"
+
+
+@pytest.mark.asyncio
 async def test_get_news_list_cache_returns_cached_payload(monkeypatch):
     async def fake_get_json_cache(key: str):
         assert key == "news:list:5:2:10"
@@ -276,6 +310,7 @@ async def test_get_news_detail_uses_cache_before_database(monkeypatch):
         "author": "tester",
         "category_id": 4,
         "views": 88,
+        "status": "published",
         "publish_time": "2026-03-14T09:00:00",
     }
 
@@ -339,8 +374,28 @@ async def test_get_news_detail_populates_cache_after_database_query(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_get_news_detail_only_queries_published_news_when_cache_misses(monkeypatch):
+    async def fake_get_news_detail_cache(news_id: int):
+        return None
+
+    async def fake_set_news_detail_cache(*args, **kwargs):
+        return True
+
+    monkeypatch.setattr("backend.crud.news.news_cache.get_news_detail_cache", fake_get_news_detail_cache)
+    monkeypatch.setattr("backend.crud.news.news_cache.set_news_detail_cache", fake_set_news_detail_cache)
+
+    session = DummySession(rows=None)
+
+    await get_news_detail(session, news_id=6)
+
+    compiled = session.statement.compile()
+    assert compiled.params["id_1"] == 6
+    assert compiled.params["status_1"] == "published"
+
+
+@pytest.mark.asyncio
 async def test_get_news_recommend_uses_cache_before_database(monkeypatch):
-    cached_rows = [{"id": 2, "title": "缓存推荐", "publishTime": "2026-03-14T09:00:00", "categoryId": 3, "views": 10}]
+    cached_rows = [{"id": 2, "title": "缓存推荐", "publishTime": "2026-03-14T09:00:00", "categoryId": 3, "views": 10, "status": "published"}]
 
     async def fake_get_news_recommend_cache(category_id: int, news_id: int, limit: int):
         assert category_id == 3
@@ -385,11 +440,13 @@ async def test_get_news_recommend_populates_cache_after_database_query(monkeypat
             SimpleNamespace(
                 id=7,
                 title="数据库推荐",
+                description="推荐摘要",
                 content="content",
                 image="https://example.com/recommend.jpg",
                 author="tester",
                 category_id=3,
                 views=66,
+                status="published",
                 publish_time=datetime(2026, 3, 14, 6, 0, 0),
             )
         ]
@@ -403,6 +460,51 @@ async def test_get_news_recommend_populates_cache_after_database_query(monkeypat
     assert cached["news_id"] == 1
     assert cached["limit"] == 5
     assert cached["expire"] == 1800
+
+
+@pytest.mark.asyncio
+async def test_search_news_only_returns_published_news():
+    session = DummyMultiExecuteSession([[], 0])
+
+    await search_news(session, keyword="AI", category_id=2, skip=0, limit=10)
+
+    stmt_params = session.statements[0].compile().params
+    count_params = session.statements[1].compile().params
+
+    assert stmt_params["category_id_1"] == 2
+    assert stmt_params["status_1"] == "published"
+    assert count_params["status_1"] == "published"
+
+
+@pytest.mark.asyncio
+async def test_get_hot_news_only_returns_published_news():
+    session = DummyMultiExecuteSession([[], 0])
+
+    await get_hot_news(session, skip=0, limit=10)
+
+    stmt_params = session.statements[0].compile().params
+    count_params = session.statements[1].compile().params
+
+    assert stmt_params["status_1"] == "published"
+    assert count_params["status_1"] == "published"
+
+
+@pytest.mark.asyncio
+async def test_get_personalized_news_only_uses_published_candidates():
+    session = DummyMultiExecuteSession([
+        [(3, 11)],
+        [(3, 12)],
+        [],
+        0,
+    ])
+
+    await get_personalized_news(session, user_id=7, skip=0, limit=10)
+
+    candidate_params = session.statements[2].compile().params
+    count_params = session.statements[3].compile().params
+
+    assert candidate_params["status_1"] == "published"
+    assert count_params["status_1"] == "published"
 
 
 @pytest.mark.asyncio
