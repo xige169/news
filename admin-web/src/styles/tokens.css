@@ -1,0 +1,75 @@
+:root {
+  /* 颜色 */
+  --bg-page: #ffffff;
+  --bg-elevated: #f7f7f5;
+  --bg-muted: #ececea;
+  --border: #e5e5e2;
+  --border-strong: #d4d4d0;
+
+  --text-primary: #1a1a1a;
+  --text-secondary: #6b6b6b;
+  --text-muted: #9a9a9a;
+  --text-on-accent: #ffffff;
+
+  --accent: #b3261e;
+  --accent-hover: #8e1c17;
+  --accent-soft: #fceeec;
+
+  --success: #2e7d32;
+  --warning: #b45309;
+  --danger: #c62828;
+
+  --success-soft: #e8f5e9;
+  --warning-soft: #fff4e5;
+  --danger-soft: #ffebee;
+  --muted-soft: #f1f1f0;
+
+  /* Admin 侧栏（唯一深色区域） */
+  --admin-sidebar-bg: #1f2024;
+  --admin-sidebar-bg-hover: #292a2e;
+  --admin-sidebar-bg-active: #2f3034;
+  --admin-sidebar-text: #d8d8d6;
+  --admin-sidebar-text-active: #ffffff;
+  --admin-sidebar-text-muted: #8a8a87;
+  --admin-sidebar-border: #2a2b2f;
+
+  /* 字体 */
+  --font-sans: 'Inter', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace;
+
+  /* 字号 */
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-16: 16px;
+  --fs-18: 18px;
+  --fs-20: 20px;
+  --fs-24: 24px;
+  --fs-30: 30px;
+  --fs-36: 36px;
+
+  /* 间距 */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-12: 48px;
+
+  /* 布局 */
+  --sidebar-width: 240px;
+  --top-bar-height: 56px;
+
+  /* 圆角与阴影 */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08);
+
+  --transition-fast: 120ms ease;
+  --transition-normal: 200ms ease;
+}

@@ -1,89 +1,243 @@
 <template>
-  <div class="page">
-    <section class="hero-card compact">
-      <p class="eyebrow">History</p>
-      <h1 class="hero-title">浏览历史</h1>
-      <p class="hero-subtitle">自动记录你看过的新闻，便于回溯和继续阅读。</p>
-    </section>
+  <div class="history">
+    <header class="page-header">
+      <div>
+        <h1 class="page-header__title">浏览历史</h1>
+        <p class="page-header__subtitle">共 {{ total }} 条浏览记录</p>
+      </div>
+      <div class="page-header__actions">
+        <n-popconfirm v-if="list.length" @positive-click="onClearAll">
+          <template #trigger>
+            <n-button>清空历史</n-button>
+          </template>
+          确认清空全部浏览历史？
+        </n-popconfirm>
+      </div>
+    </header>
 
-    <section class="section-card">
-      <div class="section-header">
-        <h2>最近浏览</h2>
-        <button class="text-button" type="button" @click="handleClear">清空历史</button>
-      </div>
-      <div v-if="items.length" class="news-list">
-        <article v-for="item in items" :key="item.historyId" class="news-card">
-          <div class="news-copy" @click="router.push(`/news/${item.id}`)">
-            <h3>{{ item.title }}</h3>
-            <p>{{ item.description || '暂无摘要' }}</p>
-            <div class="news-meta">
-              <span>{{ item.author || '未知来源' }}</span>
-              <span>{{ formatDate(item.viewTime) }}</span>
-            </div>
-          </div>
-          <button class="text-button" type="button" @click="handleDelete(item.historyId)">删除</button>
-        </article>
-      </div>
-      <van-empty v-else description="还没有浏览记录" />
-    </section>
+    <div v-if="loading && !list.length" class="history__skeletons">
+      <LoadingSkeleton v-for="n in 4" :key="n" variant="row" />
+    </div>
+
+    <div v-else-if="grouped.length" class="history__groups">
+      <section v-for="group in grouped" :key="group.label" class="history__group">
+        <h2 class="history__group-label">{{ group.label }}</h2>
+        <div class="history__group-list">
+          <NewsListRow
+            v-for="item in group.items"
+            :key="item.historyId"
+            :news="item"
+            :categories="categories"
+          >
+            <template #meta>
+              <span>{{ formatTime(item.viewTime) }} 阅读</span>
+            </template>
+            <template #actions>
+              <n-popconfirm @positive-click="onRemove(item.historyId)">
+                <template #trigger>
+                  <button type="button" class="history__remove" aria-label="删除">✕</button>
+                </template>
+                确认删除这条记录？
+              </n-popconfirm>
+            </template>
+          </NewsListRow>
+        </div>
+      </section>
+    </div>
+
+    <EmptyState
+      v-else
+      icon="🕒"
+      title="还没有浏览记录"
+      description="阅读过的新闻会出现在这里"
+    >
+      <router-link to="/">
+        <n-button type="primary">去首页看看</n-button>
+      </router-link>
+    </EmptyState>
+
+    <div v-if="hasMore" class="history__more">
+      <n-button :loading="loadingMore" size="large" @click="loadMore">加载更多</n-button>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { showToast } from 'vant'
+import { computed, onMounted, ref } from 'vue'
+import { NButton, NPopconfirm, useMessage } from 'naive-ui'
 
-import { clearHistoryEntries, fetchHistoryList, removeHistoryEntry } from '../services/history.js'
+import NewsListRow from '../components/news/NewsListRow.vue'
+import EmptyState from '../components/feedback/EmptyState.vue'
+import LoadingSkeleton from '../components/feedback/LoadingSkeleton.vue'
+import {
+  clearHistoryEntries,
+  fetchHistoryList,
+  removeHistoryEntry
+} from '../services/history'
+import { fetchCategories } from '../services/news'
 
-const router = useRouter()
-const items = ref([])
+const message = useMessage()
 
-const formatDate = (value) => {
-  if (!value) {
-    return '未知时间'
-  }
+const list = ref([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = 15
+const loading = ref(false)
+const loadingMore = ref(false)
+const categories = ref([])
 
-  return new Date(value).toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
+const hasMore = computed(() => list.value.length < total.value)
+
+const formatTime = (value) => {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
-const loadHistory = async () => {
+const groupKey = (date) => {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const target = new Date(date)
+  target.setHours(0, 0, 0, 0)
+  const diff = Math.round((today - target) / 86400000)
+  if (diff === 0) return '今天'
+  if (diff === 1) return '昨天'
+  return `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-${String(target.getDate()).padStart(2, '0')}`
+}
+
+const grouped = computed(() => {
+  const buckets = new Map()
+  for (const item of list.value) {
+    const t = item.viewTime ? new Date(item.viewTime) : null
+    if (!t || Number.isNaN(t.getTime())) continue
+    const key = groupKey(t)
+    if (!buckets.has(key)) buckets.set(key, [])
+    buckets.get(key).push(item)
+  }
+  return Array.from(buckets.entries()).map(([label, items]) => ({ label, items }))
+})
+
+const loadCategories = async () => {
   try {
-    const payload = await fetchHistoryList({ page: 1, pageSize: 20 })
-    items.value = payload.list || []
-  } catch (error) {
-    items.value = []
-    showToast(error instanceof Error ? error.message : '历史记录加载失败')
+    const data = await fetchCategories()
+    categories.value = Array.isArray(data) ? data : data?.list || []
+  } catch {
+    categories.value = []
   }
 }
 
-const handleDelete = async (historyId) => {
+const load = async ({ append = false } = {}) => {
+  if (append) {
+    loadingMore.value = true
+  } else {
+    loading.value = true
+    list.value = []
+    page.value = 1
+  }
+  try {
+    const data = await fetchHistoryList({ page: page.value, pageSize })
+    const next = data?.list || []
+    list.value = append ? [...list.value, ...next] : next
+    total.value = data?.total ?? list.value.length
+  } catch (err) {
+    message.error(err?.message || '加载失败')
+  } finally {
+    loading.value = false
+    loadingMore.value = false
+  }
+}
+
+const loadMore = async () => {
+  page.value += 1
+  await load({ append: true })
+}
+
+const onRemove = async (historyId) => {
   try {
     await removeHistoryEntry(historyId)
-    items.value = items.value.filter((item) => item.historyId !== historyId)
-    showToast('删除成功')
-  } catch (error) {
-    showToast(error instanceof Error ? error.message : '删除失败')
+    list.value = list.value.filter((it) => it.historyId !== historyId)
+    total.value = Math.max(0, total.value - 1)
+    message.success('已删除')
+  } catch (err) {
+    message.error(err?.message || '删除失败')
   }
 }
 
-const handleClear = async () => {
+const onClearAll = async () => {
   try {
     await clearHistoryEntries()
-    items.value = []
-    showToast('已清空历史')
-  } catch (error) {
-    showToast(error instanceof Error ? error.message : '清空历史失败')
+    list.value = []
+    total.value = 0
+    message.success('已清空')
+  } catch (err) {
+    message.error(err?.message || '清空失败')
   }
 }
 
 onMounted(async () => {
-  await loadHistory()
+  await loadCategories()
+  await load()
 })
 </script>
+
+<style scoped>
+.page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-8);
+  padding-bottom: var(--sp-4);
+  border-bottom: 2px solid var(--text-primary);
+}
+
+.page-header__title {
+  font-family: var(--font-serif);
+  font-size: var(--fs-36);
+}
+
+.page-header__subtitle {
+  margin-top: var(--sp-2);
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+}
+
+.history__group {
+  margin-bottom: var(--sp-8);
+}
+
+.history__group-label {
+  font-family: var(--font-sans);
+  font-size: var(--fs-12);
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding-bottom: var(--sp-2);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: var(--sp-2);
+}
+
+.history__remove {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: var(--fs-12);
+}
+
+.history__remove:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+}
+
+.history__more {
+  margin-top: var(--sp-8);
+  display: flex;
+  justify-content: center;
+}
+</style>

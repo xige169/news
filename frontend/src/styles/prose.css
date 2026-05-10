@@ -1,0 +1,132 @@
+.prose {
+  font-family: var(--font-serif);
+  font-size: var(--fs-18);
+  line-height: var(--lh-relaxed);
+  color: var(--text-primary);
+}
+
+.prose > * + * {
+  margin-top: var(--sp-6);
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4 {
+  font-family: var(--font-serif);
+  margin-top: var(--sp-8);
+  margin-bottom: var(--sp-4);
+  line-height: var(--lh-tight);
+}
+
+.prose h1 {
+  font-size: var(--fs-36);
+}
+
+.prose h2 {
+  font-size: var(--fs-30);
+}
+
+.prose h3 {
+  font-size: var(--fs-24);
+}
+
+.prose h4 {
+  font-size: var(--fs-20);
+}
+
+.prose p {
+  margin: 0 0 var(--sp-6);
+}
+
+.prose a {
+  color: var(--accent);
+  border-bottom: 1px solid var(--accent-soft);
+}
+
+.prose a:hover {
+  border-bottom-color: var(--accent);
+}
+
+.prose strong {
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.prose em {
+  font-style: italic;
+}
+
+.prose blockquote {
+  margin: var(--sp-6) 0;
+  padding: var(--sp-2) var(--sp-6);
+  border-left: 4px solid var(--accent);
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.prose ul,
+.prose ol {
+  margin: 0 0 var(--sp-6);
+  padding-left: var(--sp-6);
+  list-style-position: outside;
+}
+
+.prose ul {
+  list-style-type: disc;
+}
+
+.prose ol {
+  list-style-type: decimal;
+}
+
+.prose li {
+  margin-bottom: var(--sp-2);
+}
+
+.prose img {
+  margin: var(--sp-6) auto;
+  border-radius: var(--radius-md);
+  max-width: 100%;
+}
+
+.prose figure {
+  margin: var(--sp-8) 0;
+}
+
+.prose figcaption {
+  margin-top: var(--sp-2);
+  text-align: center;
+  font-family: var(--font-sans);
+  font-size: var(--fs-14);
+  color: var(--text-muted);
+}
+
+.prose code {
+  padding: 2px 6px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.prose pre {
+  margin: var(--sp-6) 0;
+  padding: var(--sp-4);
+  background: var(--bg-elevated);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: var(--fs-14);
+  line-height: var(--lh-snug);
+}
+
+.prose pre code {
+  padding: 0;
+  background: transparent;
+}
+
+.prose hr {
+  margin: var(--sp-8) 0;
+  border-top: 1px solid var(--border);
+}

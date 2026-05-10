@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.config.db_conf import get_db_session
-from backend.crud import admin_categories, admin_news, admin_users
+from backend.crud import admin_categories, admin_comment, admin_news, admin_users
 from backend.models.users import User
 from backend.schemas.admin import (
     AdminCategoryRequest,
@@ -190,3 +190,40 @@ async def update_admin_user_role(
             "createdAt": user.created_at,
         }
     return success_response(message="更新用户角色成功", data=data)
+
+
+@router.get("/comments")
+async def get_admin_comments(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, alias="pageSize", ge=1, le=100),
+    keyword: str | None = Query(default=None),
+    news_id: int | None = Query(default=None, alias="newsId"),
+    db: AsyncSession = Depends(get_db_session),
+    admin_user: User = Depends(auth.require_admin_user),
+):
+    items, total = await admin_comment.admin_list_comments(
+        db,
+        keyword=keyword,
+        news_id=news_id,
+        page=page,
+        page_size=page_size,
+    )
+    has_more = total > page * page_size
+    return success_response(
+        message="获取评论列表成功",
+        data={"list": items, "total": total, "hasMore": has_more},
+    )
+
+
+@router.delete("/comments/{comment_id}")
+async def delete_admin_comment(
+    comment_id: int,
+    db: AsyncSession = Depends(get_db_session),
+    admin_user: User = Depends(auth.require_admin_user),
+):
+    result = await admin_comment.admin_delete_comment(db, comment_id)
+    if result == "not_found":
+        raise HTTPException(status_code=404, detail="评论不存在")
+    if result == "already_deleted":
+        raise HTTPException(status_code=400, detail="评论已删除")
+    return success_response(message="删除评论成功")

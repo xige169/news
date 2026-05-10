@@ -1,142 +1,200 @@
 <template>
-  <div class="dashboard-page">
-    <section class="dashboard-hero page-card">
-      <div>
-        <p class="dashboard-hero__eyebrow">DAILY OPS SNAPSHOT</p>
-        <h2>新闻运营总览</h2>
-        <p>聚合稿件状态、分类与权限体量，帮助编辑和运营快速判断当日盘面。</p>
-      </div>
-      <el-button type="primary" @click="router.push('/news/create')">新建稿件</el-button>
-    </section>
-
-    <section class="dashboard-stats">
-      <article v-for="item in statCards" :key="item.label" class="dashboard-stat page-card">
-        <span>{{ item.label }}</span>
-        <strong>{{ item.value }}</strong>
-        <p>{{ item.copy }}</p>
+  <div class="dashboard">
+    <section class="dashboard__stats">
+      <article v-for="card in statCards" :key="card.label" class="stat-card">
+        <span class="stat-card__label">{{ card.label }}</span>
+        <strong class="stat-card__value">{{ card.value }}</strong>
+        <span v-if="card.copy" class="stat-card__copy">{{ card.copy }}</span>
       </article>
     </section>
 
-    <section class="page-card page-table-card">
-      <div class="section-heading">
-        <div>
-          <h2 class="section-title">最近更新</h2>
-          <p class="section-copy">优先展示最近被编辑或发布的稿件。</p>
+    <div class="dashboard__grid">
+      <section class="dashboard__panel page-card dashboard__panel--main">
+        <div class="dashboard__panel-header">
+          <div>
+            <h3 class="section-title">最近更新</h3>
+            <p class="section-copy">最近被编辑或发布的稿件</p>
+          </div>
+          <el-button @click="$router.push('/news')">查看全部</el-button>
         </div>
-      </div>
+        <el-table
+          :data="summary.recentNews || []"
+          v-loading="loading"
+          stripe
+          @row-click="onRowClick"
+        >
+          <el-table-column prop="title" label="标题" min-width="240" show-overflow-tooltip />
+          <el-table-column label="状态" width="110">
+            <template #default="{ row }">
+              <StatusChip :status="row.status" />
+            </template>
+          </el-table-column>
+          <el-table-column prop="author" label="作者" width="120" />
+          <el-table-column prop="views" label="浏览" width="80" align="right" />
+          <el-table-column label="更新时间" width="160">
+            <template #default="{ row }">
+              {{ formatDate(row.updatedAt || row.publishTime) }}
+            </template>
+          </el-table-column>
+        </el-table>
+      </section>
 
-      <el-table :data="summary.recentNews || []" stripe v-loading="loading">
-        <el-table-column prop="title" label="标题" min-width="260" />
-        <el-table-column label="状态" width="120">
-          <template #default="{ row }">
-            <span class="status-chip" :class="`status-chip--${row.status}`">
-              {{ statusTextMap[row.status] || row.status }}
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="views" label="浏览量" width="110" />
-        <el-table-column prop="author" label="作者" width="150" />
-      </el-table>
-    </section>
+      <section class="dashboard__panel page-card">
+        <div class="dashboard__panel-header">
+          <div>
+            <h3 class="section-title">状态分布</h3>
+            <p class="section-copy">按发布状态聚合</p>
+          </div>
+        </div>
+        <StatusDonut
+          :data="{
+            published: summary.publishedNewsTotal || 0,
+            draft: summary.draftNewsTotal || 0,
+            offline: summary.offlineNewsTotal || 0
+          }"
+        />
+      </section>
+
+      <section class="dashboard__panel page-card">
+        <div class="dashboard__panel-header">
+          <div>
+            <h3 class="section-title">栏目稿件量</h3>
+            <p class="section-copy">每个栏目下的发布数量</p>
+          </div>
+        </div>
+        <CategoryBar :items="categories" :height="280" />
+      </section>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElButton, ElMessage, ElTable, ElTableColumn } from 'element-plus'
 
+import StatusChip from '../components/common/StatusChip.vue'
+import StatusDonut from '../components/charts/StatusDonut.vue'
+import CategoryBar from '../components/charts/CategoryBar.vue'
 import { fetchDashboardSummary } from '../services/dashboard.js'
+import { fetchCategories } from '../services/categories.js'
 
 const router = useRouter()
 const loading = ref(false)
 const summary = ref({})
-
-const statusTextMap = {
-  published: '已发布',
-  draft: '草稿',
-  offline: '已下线',
-}
+const categories = ref([])
 
 const statCards = computed(() => [
-  { label: '稿件总数', value: summary.value.newsTotal || 0, copy: '当前新闻内容池规模' },
-  { label: '已发布', value: summary.value.publishedNewsTotal || 0, copy: '正在前台可见的稿件' },
-  { label: '草稿', value: summary.value.draftNewsTotal || 0, copy: '待编辑和待确认稿件' },
-  { label: '已下线', value: summary.value.offlineNewsTotal || 0, copy: '暂不展示但保留资料' },
-  { label: '栏目数量', value: summary.value.categoryTotal || 0, copy: '导航和运营栏目结构' },
-  { label: '后台管理员', value: summary.value.adminTotal || 0, copy: '具备后台权限账号数' },
+  { label: '稿件总数', value: summary.value.newsTotal || 0, copy: '所有状态' },
+  { label: '已发布', value: summary.value.publishedNewsTotal || 0, copy: '前台可见' },
+  { label: '草稿', value: summary.value.draftNewsTotal || 0, copy: '待发布' },
+  { label: '已下线', value: summary.value.offlineNewsTotal || 0, copy: '暂时下架' },
+  { label: '栏目', value: summary.value.categoryTotal || 0, copy: '内容分类数' },
+  { label: '用户', value: summary.value.userTotal || 0, copy: `含 ${summary.value.adminTotal || 0} 名管理员` }
 ])
 
-const loadSummary = async () => {
+const formatDate = (value) => {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+const onRowClick = (row) => {
+  if (row?.id) router.push(`/news/${row.id}/edit`)
+}
+
+const load = async () => {
   loading.value = true
   try {
-    summary.value = await fetchDashboardSummary()
+    const [s, c] = await Promise.all([fetchDashboardSummary(), fetchCategories()])
+    summary.value = s || {}
+    categories.value = Array.isArray(c) ? c : c?.list || []
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '仪表盘加载失败')
+    ElMessage.error(error?.message || '加载失败')
   } finally {
     loading.value = false
   }
 }
 
-onMounted(loadSummary)
+onMounted(load)
 </script>
 
 <style scoped>
-.dashboard-page {
-  display: grid;
-  gap: 20px;
-}
-
-.dashboard-hero {
+.dashboard {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 26px 28px;
+  flex-direction: column;
+  gap: var(--sp-5);
 }
 
-.dashboard-hero__eyebrow {
-  margin: 0 0 10px;
-  color: var(--accent);
-  font-size: 11px;
-  letter-spacing: 0.3em;
-}
-
-.dashboard-hero h2 {
-  margin: 0;
-  font-size: 30px;
-}
-
-.dashboard-hero p:last-child {
-  margin: 10px 0 0;
-  color: var(--text-secondary);
-}
-
-.dashboard-stats {
+.dashboard__stats {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: var(--sp-4);
 }
 
-.dashboard-stat {
-  padding: 22px;
+.stat-card {
+  background: var(--bg-page);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--sp-4) var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
 }
 
-.dashboard-stat span {
+.stat-card__label {
+  font-size: var(--fs-12);
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.stat-card__value {
+  font-size: var(--fs-30);
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.stat-card__copy {
+  font-size: var(--fs-12);
   color: var(--text-secondary);
-  font-size: 13px;
 }
 
-.dashboard-stat strong {
-  display: block;
-  margin-top: 12px;
-  font-size: 34px;
+.dashboard__grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: var(--sp-4);
 }
 
-.dashboard-stat p {
-  margin: 12px 0 0;
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.6;
+.dashboard__panel {
+  padding: var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+}
+
+.dashboard__panel--main {
+  grid-row: span 1;
+}
+
+.dashboard__panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--sp-4);
+}
+
+@media (max-width: 1280px) {
+  .dashboard__stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .dashboard__grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .dashboard__panel--main {
+    grid-column: span 2;
+  }
 }
 </style>

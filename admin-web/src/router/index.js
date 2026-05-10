@@ -8,6 +8,7 @@ import LoginPage from '../views/LoginPage.vue'
 import NewsEditorPage from '../views/NewsEditorPage.vue'
 import NewsManagementPage from '../views/NewsManagementPage.vue'
 import CategoriesPage from '../views/CategoriesPage.vue'
+import CommentsPage from '../views/CommentsPage.vue'
 import UsersPage from '../views/UsersPage.vue'
 import AdminLayout from '../views/layout/AdminLayout.vue'
 
@@ -61,6 +62,12 @@ const routes = [
         name: 'categories',
         component: CategoriesPage,
         meta: { title: '分类管理', requiresAuth: true },
+      },
+      {
+        path: '/comments',
+        name: 'comments',
+        component: CommentsPage,
+        meta: { title: '评论管理', requiresAuth: true },
       },
       {
         path: '/users',

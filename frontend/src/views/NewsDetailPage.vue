@@ -1,202 +1,510 @@
 <template>
-  <div class="page detail-page">
-    <section class="hero-card compact">
-      <p class="eyebrow">Article</p>
-      <h1 class="hero-title">{{ detail.title || '新闻详情' }}</h1>
-      <div class="detail-image-frame">
-        <van-image
-          class="detail-hero-image"
-          fit="contain"
-          radius="18"
-          :src="detailImage"
-        />
-      </div>
-      <div class="detail-meta">
-        <span>{{ detail.author || '未知作者' }}</span>
-        <span>{{ formatDate(detail.publishTime) }}</span>
-        <span>{{ detail.views || 0 }} 次阅读</span>
-      </div>
-      <div class="hero-actions">
-        <button
-          class="favorite-toggle click-effect"
-          :class="{ active: favoriteAction.pressed }"
-          type="button"
-          @click="toggleFavorite"
-          :disabled="favoriteLoading"
-          :aria-pressed="favoriteAction.pressed"
-        >
-          <span class="favorite-toggle__icon">
-            <van-icon :name="favoriteAction.icon" />
-          </span>
-          <span class="favorite-toggle__label">{{ favoriteAction.label }}</span>
-        </button>
-        <button class="hero-button hero-button--ghost click-effect" type="button" @click="router.push('/')">
-          返回首页
-        </button>
-      </div>
-    </section>
+  <article class="detail">
+    <div class="detail__back">
+      <router-link to="/" class="detail__back-link">← 返回</router-link>
+    </div>
 
-    <section class="section-card">
-      <div class="section-header">
-        <h2>摘要与标签</h2>
-      </div>
-      <p class="detail-summary">{{ detail.summary || detail.description || '暂无摘要内容' }}</p>
-      <div class="topic-tags" v-if="detail.tags?.length">
-        <span v-for="tag in detail.tags" :key="tag" class="topic-tag">{{ tag }}</span>
-      </div>
-    </section>
+    <div v-if="loading" class="detail__loading">
+      <LoadingSkeleton variant="card" />
+    </div>
 
-    <section class="section-card">
-      <div class="section-header">
-        <h2>正文</h2>
-      </div>
-      <p class="detail-content">{{ detail.content || '暂无正文内容' }}</p>
-    </section>
+    <template v-else-if="news">
+      <header class="detail__header">
+        <div class="detail__eyebrow">
+          <span v-if="categoryName" class="detail__category">{{ categoryName }}</span>
+          <span v-if="publishLabel" class="detail__time">{{ publishLabel }}</span>
+        </div>
 
-    <section class="section-card">
-      <div class="section-header">
-        <h2>相关推荐</h2>
-      </div>
-      <div v-if="relatedNews.length" class="news-list">
-        <article
-          v-for="item in relatedNews"
-          :key="item.id"
-          class="news-card click-effect"
-          @click="router.push(`/news/${item.id}`)"
-        >
-          <van-image
-            class="news-cover"
-            fit="cover"
-            radius="14"
-            :src="getNewsImageUrl(item.image)"
-          />
-          <div class="news-copy">
-            <h3>{{ item.title }}</h3>
-            <p>{{ item.summary || item.description || item.content || '暂无摘要' }}</p>
-            <div class="topic-tags" v-if="item.tags?.length">
-              <span v-for="tag in item.tags" :key="tag" class="topic-tag">{{ tag }}</span>
-            </div>
+        <h1 class="detail__title">{{ news.title }}</h1>
+
+        <p v-if="news.summary || news.description" class="detail__summary">
+          {{ news.summary || news.description }}
+        </p>
+
+        <div class="detail__meta">
+          <div class="detail__meta-info">
+            <span v-if="news.author">{{ news.author }}</span>
+            <span v-if="typeof news.views === 'number'">{{ news.views }} 阅读</span>
           </div>
-        </article>
-      </div>
-      <p v-else class="preference-copy">暂无相关推荐</p>
-    </section>
-  </div>
+          <div class="detail__actions">
+            <button
+              type="button"
+              class="detail__favorite"
+              :class="{ 'detail__favorite--active': favorited }"
+              @click="onToggleFavorite"
+            >
+              <span class="detail__favorite-icon">{{ favorited ? '♥' : '♡' }}</span>
+              {{ favorited ? '已收藏' : '收藏' }}
+            </button>
+            <button type="button" class="detail__share" @click="onShare">↗ 分享</button>
+          </div>
+        </div>
+      </header>
+
+      <figure v-if="news.image" class="detail__cover">
+        <img :src="news.image" :alt="news.title" />
+      </figure>
+
+      <div class="detail__body prose" v-html="renderedContent" />
+
+      <CommentSection v-if="news?.id" :news-id="news.id" />
+
+      <section v-if="related.length" class="detail__related">
+        <header class="detail__related-header">
+          <h2 class="detail__related-title">相关推荐</h2>
+        </header>
+        <div class="detail__related-grid">
+          <NewsCard
+            v-for="item in related"
+            :key="item.id"
+            :news="item"
+            :categories="categories"
+          />
+        </div>
+      </section>
+    </template>
+
+    <EmptyState
+      v-else
+      icon="📭"
+      title="新闻不存在"
+      description="这篇内容已被移除或链接错误"
+    >
+      <router-link to="/">
+        <n-button>返回首页</n-button>
+      </router-link>
+    </EmptyState>
+
+    <button
+      v-show="showBackToTop"
+      type="button"
+      class="detail__top"
+      aria-label="回到顶部"
+      @click="scrollToTop"
+    >
+      ↑
+    </button>
+
+    <n-modal v-model:show="showLoginModal" preset="card" title="登录后再操作" style="width: 360px">
+      <p class="detail__modal-text">收藏新闻需要先登录，是否前往登录？</p>
+      <template #footer>
+        <div class="detail__modal-actions">
+          <n-button @click="showLoginModal = false">取消</n-button>
+          <n-button type="primary" @click="goLogin">前往登录</n-button>
+        </div>
+      </template>
+    </n-modal>
+  </article>
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { showToast } from 'vant'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
+import { NButton, NModal, useMessage } from 'naive-ui'
 
-import { addFavorite, checkFavorite, removeFavorite } from '../services/favorite.js'
-import { addHistoryEntry } from '../services/history.js'
-import { fetchNewsDetail } from '../services/news.js'
+import NewsCard from '../components/news/NewsCard.vue'
+import CommentSection from '../components/news/CommentSection.vue'
+import EmptyState from '../components/feedback/EmptyState.vue'
+import LoadingSkeleton from '../components/feedback/LoadingSkeleton.vue'
+import {
+  fetchCategories,
+  fetchNewsDetail,
+  fetchNewsList,
+  fetchRecommendedNews
+} from '../services/news'
+import {
+  addFavorite,
+  checkFavorite,
+  removeFavorite
+} from '../services/favorite'
+import { addHistoryEntry } from '../services/history'
 import { useAuthStore } from '../store/auth'
-import { getFavoriteActionMeta } from '../utils/favorite.js'
-import { getNewsImageUrl } from '../utils/media.js'
 
 const route = useRoute()
 const router = useRouter()
-const authStore = useAuthStore()
+const auth = useAuthStore()
+const message = useMessage()
 
-const detail = ref({})
-const isFavorite = ref(false)
-const favoriteLoading = ref(false)
+const news = ref(null)
+const loading = ref(false)
+const favorited = ref(false)
+const categories = ref([])
+const related = ref([])
+const showLoginModal = ref(false)
+const showBackToTop = ref(false)
 
-const relatedNews = computed(() => detail.value.relatedNews || [])
-const detailImage = computed(() => getNewsImageUrl(detail.value.image))
-const favoriteAction = computed(() => getFavoriteActionMeta(isFavorite.value, favoriteLoading.value))
+const categoryName = computed(() => {
+  if (!news.value?.categoryId) return ''
+  const match = categories.value.find((c) => c.id === news.value.categoryId)
+  return match ? match.name : ''
+})
 
-const formatDate = (value) => {
-  if (!value) {
-    return '未知时间'
-  }
+const publishLabel = computed(() => {
+  const value = news.value?.publishTime
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+})
 
-  return new Date(value).toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
-}
+const renderedContent = computed(() => {
+  const raw = news.value?.content || news.value?.description || ''
+  if (!raw) return ''
+  const html = marked.parse(raw, { breaks: true, gfm: true })
+  return DOMPurify.sanitize(html)
+})
 
-const syncFavoriteState = async (id) => {
-  if (!authStore.isLoggedIn) {
-    isFavorite.value = false
-    return
-  }
-
+const loadCategories = async () => {
   try {
-    const payload = await checkFavorite(id)
-    isFavorite.value = Boolean(payload.isFavorite)
-  } catch (error) {
-    showToast(error instanceof Error ? error.message : '收藏状态获取失败')
-  }
-}
-
-const writeHistory = async (id) => {
-  if (!authStore.isLoggedIn) {
-    return
-  }
-
-  try {
-    await addHistoryEntry(id)
-  } catch (error) {
-    showToast(error instanceof Error ? error.message : '历史记录写入失败')
+    const data = await fetchCategories()
+    categories.value = Array.isArray(data) ? data : data?.list || []
+  } catch {
+    categories.value = []
   }
 }
 
 const loadDetail = async (id) => {
+  loading.value = true
+  news.value = null
   try {
-    detail.value = await fetchNewsDetail(id)
-    await Promise.all([syncFavoriteState(id), writeHistory(id)])
-  } catch (error) {
-    showToast(error instanceof Error ? error.message : '详情加载失败')
+    const data = await fetchNewsDetail(id)
+    news.value = data
+  } catch (err) {
+    message.error(err?.message || '加载失败')
+  } finally {
+    loading.value = false
   }
 }
 
-const toggleFavorite = async () => {
-  if (!authStore.isLoggedIn) {
-    router.push({
-      path: '/login',
-      query: {
-        redirect: route.fullPath
-      }
-    })
+const loadFavoriteStatus = async (id) => {
+  if (!auth.isLoggedIn) {
+    favorited.value = false
     return
   }
-
-  favoriteLoading.value = true
-
   try {
-    if (isFavorite.value) {
-      await removeFavorite(detail.value.id)
-      isFavorite.value = false
-      showToast('已取消收藏')
-    } else {
-      await addFavorite(detail.value.id)
-      isFavorite.value = true
-      showToast('收藏成功')
+    const data = await checkFavorite(id)
+    favorited.value = Boolean(data?.favorite ?? data?.favorited ?? data === true)
+  } catch {
+    favorited.value = false
+  }
+}
+
+const loadRelated = async () => {
+  if (!news.value) return
+  try {
+    if (news.value.categoryId) {
+      const data = await fetchNewsList({
+        categoryId: news.value.categoryId,
+        page: 1,
+        pageSize: 5
+      })
+      related.value = (data?.list || []).filter((it) => it.id !== news.value.id).slice(0, 4)
     }
-  } catch (error) {
-    showToast(error instanceof Error ? error.message : '收藏操作失败')
-  } finally {
-    favoriteLoading.value = false
+    if (!related.value.length) {
+      const data = await fetchRecommendedNews({ page: 1, pageSize: 5 })
+      related.value = (data?.list || []).filter((it) => it.id !== news.value.id).slice(0, 4)
+    }
+  } catch {
+    related.value = []
+  }
+}
+
+const recordHistory = async (id) => {
+  if (!auth.isLoggedIn) return
+  try {
+    await addHistoryEntry(id)
+  } catch {
+    // ignore
+  }
+}
+
+const onToggleFavorite = async () => {
+  if (!auth.isLoggedIn) {
+    showLoginModal.value = true
+    return
+  }
+  if (!news.value) return
+  try {
+    if (favorited.value) {
+      await removeFavorite(news.value.id)
+      favorited.value = false
+      message.success('已取消收藏')
+    } else {
+      await addFavorite(news.value.id)
+      favorited.value = true
+      message.success('已加入收藏')
+    }
+  } catch (err) {
+    message.error(err?.message || '操作失败')
+  }
+}
+
+const onShare = async () => {
+  try {
+    await navigator.clipboard.writeText(window.location.href)
+    message.success('链接已复制')
+  } catch {
+    message.warning('请手动复制地址栏链接')
+  }
+}
+
+const goLogin = () => {
+  showLoginModal.value = false
+  router.push({ path: '/login', query: { redirect: route.fullPath } })
+}
+
+const scrollToTop = () => {
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+
+const onScroll = () => {
+  showBackToTop.value = window.scrollY > 600
+}
+
+const initAll = async (id) => {
+  await loadDetail(id)
+  if (news.value) {
+    await Promise.all([loadFavoriteStatus(id), loadRelated(), recordHistory(id)])
   }
 }
 
 watch(
   () => route.params.id,
-  async (value) => {
-    if (!value) {
-      return
+  (raw) => {
+    const id = Number(raw)
+    if (Number.isFinite(id)) {
+      initAll(id)
+      window.scrollTo({ top: 0 })
     }
-
-    await loadDetail(Number(value))
-  },
-  { immediate: true }
+  }
 )
+
+onMounted(async () => {
+  window.addEventListener('scroll', onScroll, { passive: true })
+  await loadCategories()
+  const id = Number(route.params.id)
+  if (Number.isFinite(id)) {
+    await initAll(id)
+  }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', onScroll)
+})
 </script>
+
+<style scoped>
+.detail {
+  max-width: 960px;
+  margin: 0 auto;
+  position: relative;
+}
+
+.detail__back {
+  margin-bottom: var(--sp-6);
+}
+
+.detail__back-link {
+  font-size: var(--fs-14);
+  color: var(--text-secondary);
+}
+
+.detail__back-link:hover {
+  color: var(--accent);
+}
+
+.detail__loading {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.detail__header {
+  max-width: 760px;
+  margin: 0 auto var(--sp-8);
+  text-align: center;
+}
+
+.detail__eyebrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
+  font-size: var(--fs-12);
+  letter-spacing: 0.06em;
+}
+
+.detail__category {
+  color: var(--accent);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.detail__time {
+  color: var(--text-muted);
+}
+
+.detail__title {
+  font-family: var(--font-serif);
+  font-size: var(--fs-48);
+  font-weight: 800;
+  line-height: var(--lh-tight);
+  margin-bottom: var(--sp-5);
+}
+
+.detail__summary {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: var(--fs-20);
+  color: var(--text-secondary);
+  line-height: var(--lh-normal);
+  margin-bottom: var(--sp-6);
+}
+
+.detail__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: var(--sp-5);
+  border-top: 1px solid var(--border);
+}
+
+.detail__meta-info {
+  display: flex;
+  gap: var(--sp-4);
+  font-size: var(--fs-14);
+  color: var(--text-muted);
+}
+
+.detail__actions {
+  display: flex;
+  gap: var(--sp-2);
+}
+
+.detail__favorite,
+.detail__share {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-page);
+  font-size: var(--fs-14);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.detail__favorite:hover,
+.detail__share:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.detail__favorite--active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+}
+
+.detail__favorite--active:hover {
+  background: var(--accent-hover);
+  color: var(--text-on-accent);
+}
+
+.detail__favorite-icon {
+  font-size: var(--fs-16);
+}
+
+.detail__cover {
+  max-width: 760px;
+  margin: 0 auto var(--sp-8);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.detail__cover img {
+  width: 100%;
+  display: block;
+}
+
+.detail__body {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.detail__related {
+  max-width: 1200px;
+  margin: var(--sp-16) auto 0;
+  padding-top: var(--sp-8);
+  border-top: 1px solid var(--border);
+}
+
+.detail__related-header {
+  margin-bottom: var(--sp-6);
+  padding-bottom: var(--sp-3);
+  border-bottom: 2px solid var(--text-primary);
+}
+
+.detail__related-title {
+  font-family: var(--font-serif);
+  font-size: var(--fs-24);
+  font-weight: 800;
+}
+
+.detail__related-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-6);
+}
+
+.detail__top {
+  position: fixed;
+  bottom: var(--sp-8);
+  right: var(--sp-8);
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--text-on-accent);
+  border: 0;
+  font-size: var(--fs-20);
+  cursor: pointer;
+  box-shadow: var(--shadow-lg);
+  z-index: 50;
+  transition: background var(--transition-fast);
+}
+
+.detail__top:hover {
+  background: var(--accent-hover);
+}
+
+.detail__modal-text {
+  font-size: var(--fs-14);
+  color: var(--text-secondary);
+  line-height: var(--lh-normal);
+}
+
+.detail__modal-actions {
+  display: flex;
+  gap: var(--sp-2);
+  justify-content: flex-end;
+}
+
+@media (max-width: 899px) {
+  .detail__title {
+    font-size: var(--fs-30);
+  }
+  .detail__related-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .detail__meta {
+    flex-direction: column;
+    gap: var(--sp-3);
+    align-items: flex-start;
+  }
+}
+</style>

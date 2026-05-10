@@ -1,327 +1,255 @@
 <template>
-  <div class="page page-home">
-    <section class="hero-card hero-card--editorial">
-      <p class="eyebrow">Daily Briefing</p>
-      <h1 class="hero-title">头条新闻前台</h1>
-      <p class="hero-subtitle">
-        以栏目切换、编辑推荐和即时阅读为核心，串起新闻、收藏、历史和个人资料。
-      </p>
-      <form class="hero-search" @submit.prevent="openSearchPage">
-        <input
-          v-model.trim="searchKeyword"
-          class="search-input search-input--hero"
-          type="search"
-          placeholder="搜索今日议题、公司、人物"
-        />
-        <button class="hero-button hero-button--primary click-effect" type="submit">
-          搜索新闻
-        </button>
-      </form>
-      <div class="hero-actions">
-        <button class="hero-button hero-button--primary click-effect" type="button" @click="openPrimaryAction">
-          {{ authStore.isLoggedIn ? '查看我的资料' : '立即登录' }}
-        </button>
-        <button class="hero-button hero-button--ghost click-effect" type="button" @click="refreshCurrentCategory">
-          刷新当前栏目
-        </button>
-      </div>
+  <div class="home">
+    <section v-if="hero" class="home__hero">
+      <NewsCard :news="hero" :categories="categories" feature />
+    </section>
+    <section v-else-if="loading" class="home__hero">
+      <LoadingSkeleton variant="card" />
     </section>
 
-    <section class="section-card">
-      <div class="section-header">
-        <h2>新闻栏目</h2>
-        <span class="section-hint">{{ categories.length }} 个分类</span>
-      </div>
-      <div class="category-grid">
-        <button
-          v-for="item in categories"
-          :key="item.id"
-          class="category-chip click-effect"
-          :class="{ active: item.id === activeCategory }"
-          type="button"
-          @click="activeCategory = item.id"
-        >
-          {{ item.name }}
-        </button>
-      </div>
-    </section>
+    <div class="home__body">
+      <div class="home__main">
+        <header class="home__section-header">
+          <h2 class="home__section-title">推荐</h2>
+          <button v-if="categoryId" type="button" class="home__filter-clear" @click="clearCategory">
+            清除筛选 ✕
+          </button>
+        </header>
 
-    <section class="section-card">
-      <div class="section-header">
-        <h2>为你推荐</h2>
-        <span class="section-hint">{{ recommendSourceLabel }}</span>
-      </div>
-      <article class="feature-card click-effect" role="button" tabindex="0" @click="goToDetail(featuredNews.id)">
-        <van-image
-          class="feature-image"
-          fit="cover"
-          radius="18"
-          :src="featuredNews.image"
-        />
-        <div class="feature-copy">
-          <h3>{{ featuredNews.title }}</h3>
-          <p>{{ featuredNews.summary }}</p>
+        <div v-if="loading && !feed.length" class="home__feed-grid">
+          <LoadingSkeleton v-for="n in 4" :key="n" variant="card" />
         </div>
-        <span class="feature-tag">{{ featuredNews.tag }}</span>
-      </article>
-    </section>
 
-    <section class="section-card">
-      <div class="section-header">
-        <h2>热门追踪</h2>
-        <span class="section-hint">全站热度排行</span>
-      </div>
-      <div v-if="hotNews.length" class="news-list">
-        <article
-          v-for="item in hotNews"
-          :key="item.id"
-          class="news-card click-effect"
-          @click="goToDetail(item.id)"
-        >
-          <van-image
-            class="news-cover"
-            fit="cover"
-            radius="14"
-            :src="item.image"
+        <div v-else-if="feedRest.length" class="home__feed-grid">
+          <NewsCard
+            v-for="item in feedRest"
+            :key="item.id"
+            :news="item"
+            :categories="categories"
           />
-          <div class="news-copy">
-            <h3>{{ item.title }}</h3>
-            <p>{{ item.summary }}</p>
-            <div class="topic-tags" v-if="item.tags.length">
-              <span v-for="tag in item.tags" :key="tag" class="topic-tag">{{ tag }}</span>
-            </div>
-          </div>
-        </article>
-      </div>
-      <p v-else class="preference-copy">暂无热门新闻</p>
-    </section>
+        </div>
 
-    <section class="section-card">
-      <div class="section-header">
-        <h2>最新快讯</h2>
-        <span class="section-hint">点击查看详情</span>
+        <EmptyState
+          v-else-if="!feed.length"
+          icon="📰"
+          title="暂无新闻"
+          description="当前栏目下没有可显示的新闻"
+        />
+
+        <div v-if="hasMore" class="home__more">
+          <n-button :loading="loadingMore" size="large" @click="loadMore">加载更多</n-button>
+        </div>
       </div>
-      <p v-if="isLoading" class="preference-copy">新闻加载中...</p>
-      <p v-else-if="newsList.length === 0" class="preference-copy">当前暂无新闻数据</p>
-      <div v-else class="news-list">
-        <article
-          v-for="item in newsList"
-          :key="item.id"
-          class="news-card click-effect"
-          @click="goToDetail(item.id)"
-        >
-          <van-image
-            class="news-cover"
-            fit="cover"
-            radius="14"
-            :src="item.image"
-          />
-          <div class="news-copy">
-            <h3>{{ item.title }}</h3>
-            <p>{{ item.summary }}</p>
-            <div class="topic-tags" v-if="item.tags.length">
-              <span v-for="tag in item.tags" :key="tag" class="topic-tag">{{ tag }}</span>
-            </div>
-            <div class="news-meta">
-              <span>{{ item.source }}</span>
-              <span>{{ item.time }}</span>
-            </div>
-          </div>
-        </article>
-        <button
-          v-if="hasMore"
-          class="load-more-button click-effect"
-          type="button"
-          :disabled="isLoadingMore"
-          @click="loadMoreNews"
-        >
-          {{ isLoadingMore ? '加载中...' : '加载更多' }}
-        </button>
-        <p v-else class="preference-copy">该分类新闻已全部加载</p>
+
+      <div class="home__aside">
+        <HotList :items="hotItems" :loading="hotLoading" />
+        <CategoryNav
+          v-model="categoryId"
+          :items="categories"
+          @change="onCategoryChange"
+        />
       </div>
-    </section>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { showToast } from 'vant'
+import { useRoute, useRouter } from 'vue-router'
+import { NButton, useMessage } from 'naive-ui'
 
-import { fetchCategories, fetchHotNews, fetchNewsList, fetchRecommendedNews } from '../services/news.js'
-import { useAuthStore } from '../store/auth'
-import { getNewsImageUrl } from '../utils/media.js'
-import { mergeNewsPage, resetPaginationState } from '../utils/news-pagination.js'
+import NewsCard from '../components/news/NewsCard.vue'
+import HotList from '../components/news/HotList.vue'
+import CategoryNav from '../components/news/CategoryNav.vue'
+import EmptyState from '../components/feedback/EmptyState.vue'
+import LoadingSkeleton from '../components/feedback/LoadingSkeleton.vue'
 
+import {
+  fetchCategories,
+  fetchHotNews,
+  fetchNewsList,
+  fetchRecommendedNews
+} from '../services/news'
+
+const route = useRoute()
 const router = useRouter()
-const authStore = useAuthStore()
+const message = useMessage()
 
 const categories = ref([])
-const activeCategory = ref(null)
-const newsList = ref([])
-const hotNews = ref([])
-const recommendedNews = ref([])
-const recommendSource = ref('hot')
-const searchKeyword = ref('')
-const isLoading = ref(false)
-const isLoadingMore = ref(false)
-const currentPage = ref(1)
-const hasMore = ref(true)
+const hotItems = ref([])
+const hotLoading = ref(false)
 
-const formatDate = (value) => {
-  if (!value) {
-    return '刚刚'
+const feed = ref([])
+const page = ref(1)
+const pageSize = 12
+const total = ref(0)
+const hasMore = computed(() => feed.value.length < total.value)
+
+const loading = ref(false)
+const loadingMore = ref(false)
+
+const categoryId = ref(route.query.category ? Number(route.query.category) : null)
+
+const hero = computed(() => feed.value[0] || null)
+const feedRest = computed(() => feed.value.slice(1))
+
+const loadCategories = async () => {
+  try {
+    const data = await fetchCategories()
+    categories.value = Array.isArray(data) ? data : data?.list || []
+  } catch {
+    categories.value = []
   }
-
-  return new Date(value).toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
 }
 
-const formatNewsItem = (item) => ({
-  id: item.id,
-  title: item.title,
-  summary: item.summary || item.description || '暂无摘要',
-  image: getNewsImageUrl(item.image),
-  source: item.author || '未知来源',
-  time: formatDate(item.publishTime),
-  tags: item.tags || []
-})
-
-const loadNewsList = async (categoryId, page = 1) => {
-  if (!categoryId) {
-    newsList.value = []
-    return
-  }
-
-  if (page === 1) {
-    isLoading.value = true
-  } else {
-    isLoadingMore.value = true
-  }
-
+const loadHot = async () => {
+  hotLoading.value = true
   try {
-    const payload = await fetchNewsList({ categoryId, page, pageSize: 10 })
-    const nextState = mergeNewsPage(
-      {
-        items: newsList.value,
-        page: currentPage.value,
-        hasMore: hasMore.value
-      },
-      payload.list.map(formatNewsItem),
-      payload.hasMore,
-      page
-    )
-
-    newsList.value = nextState.items
-    currentPage.value = nextState.page
-    hasMore.value = nextState.hasMore
-  } catch (error) {
-    if (page === 1) {
-      newsList.value = []
-    }
-    showToast(error instanceof Error ? error.message : '新闻加载失败')
+    const data = await fetchHotNews({ page: 1, pageSize: 10 })
+    hotItems.value = data?.list || []
+  } catch {
+    hotItems.value = []
   } finally {
-    if (page === 1) {
-      isLoading.value = false
-    } else {
-      isLoadingMore.value = false
-    }
+    hotLoading.value = false
   }
 }
 
-const loadHomePage = async () => {
+const loadFeed = async ({ append = false } = {}) => {
+  if (append) {
+    loadingMore.value = true
+  } else {
+    loading.value = true
+    feed.value = []
+    page.value = 1
+  }
+
   try {
-    const [categoryList, hotPayload, recommendPayload] = await Promise.all([
-      fetchCategories(),
-      fetchHotNews({ page: 1, pageSize: 3 }),
-      fetchRecommendedNews({ page: 1, pageSize: 3 })
-    ])
-    categories.value = categoryList
-    hotNews.value = hotPayload.list.map(formatNewsItem)
-    recommendedNews.value = recommendPayload.list.map(formatNewsItem)
-    recommendSource.value = recommendPayload.source || 'hot'
+    const data = categoryId.value
+      ? await fetchNewsList({ categoryId: categoryId.value, page: page.value, pageSize })
+      : await fetchRecommendedNews({ page: page.value, pageSize })
 
-    if (!activeCategory.value) {
-      activeCategory.value = categoryList[0]?.id ?? null
+    const list = data?.list || []
+    feed.value = append ? [...feed.value, ...list] : list
+    total.value = data?.total ?? feed.value.length
+  } catch (err) {
+    message.error(err?.message || '加载失败')
+  } finally {
+    loading.value = false
+    loadingMore.value = false
+  }
+}
+
+const loadMore = async () => {
+  page.value += 1
+  await loadFeed({ append: true })
+}
+
+const onCategoryChange = (id) => {
+  categoryId.value = id
+  router.replace({ path: '/', query: id ? { category: id } : {} })
+  loadFeed()
+}
+
+const clearCategory = () => onCategoryChange(null)
+
+watch(
+  () => route.query.category,
+  (raw) => {
+    const next = raw ? Number(raw) : null
+    if (next !== categoryId.value) {
+      categoryId.value = next
+      loadFeed()
     }
-  } catch (error) {
-    showToast(error instanceof Error ? error.message : '分类加载失败')
   }
-}
-
-const featuredNews = computed(() => {
-  if (recommendedNews.value.length === 0) {
-    return {
-      id: null,
-      title: '暂无推荐内容',
-      summary: isLoading.value ? '正在加载新闻内容。' : '当前暂无可展示的推荐内容。',
-      image: getNewsImageUrl(''),
-      tag: '提示'
-    }
-  }
-
-  return {
-    id: recommendedNews.value[0].id,
-    title: recommendedNews.value[0].title,
-    summary: recommendedNews.value[0].summary,
-    image: recommendedNews.value[0].image,
-    tag: recommendSource.value === 'personalized' ? '为你推荐' : '热门推荐'
-  }
-})
-
-const recommendSourceLabel = computed(() => (
-  recommendSource.value === 'personalized' ? '结合你的阅读轨迹' : '基于全站热度'
-))
-
-const goToDetail = (id) => {
-  if (!id) {
-    return
-  }
-
-  router.push(`/news/${id}`)
-}
-
-const openPrimaryAction = () => {
-  router.push(authStore.isLoggedIn ? '/profile' : '/login')
-}
-
-const openSearchPage = () => {
-  router.push({
-    path: '/search',
-    query: searchKeyword.value ? { q: searchKeyword.value } : {}
-  })
-}
-
-const refreshCurrentCategory = async () => {
-  const resetState = resetPaginationState()
-  newsList.value = resetState.items
-  currentPage.value = resetState.page
-  hasMore.value = resetState.hasMore
-  await loadNewsList(activeCategory.value, 1)
-}
-
-const loadMoreNews = async () => {
-  if (!activeCategory.value || !hasMore.value || isLoadingMore.value) {
-    return
-  }
-
-  await loadNewsList(activeCategory.value, currentPage.value + 1)
-}
-
-watch(activeCategory, async (categoryId) => {
-  const resetState = resetPaginationState()
-  newsList.value = resetState.items
-  currentPage.value = resetState.page
-  hasMore.value = resetState.hasMore
-  await loadNewsList(categoryId, 1)
-})
+)
 
 onMounted(async () => {
-  await loadHomePage()
+  await loadCategories()
+  await Promise.all([loadFeed(), loadHot()])
 })
 </script>
+
+<style scoped>
+.home__hero {
+  margin-bottom: var(--sp-12);
+  padding-bottom: var(--sp-8);
+  border-bottom: 1px solid var(--border);
+}
+
+.home__body {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--sp-12);
+  align-items: start;
+}
+
+.home__main {
+  min-width: 0;
+}
+
+.home__section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--sp-6);
+  padding-bottom: var(--sp-3);
+  border-bottom: 2px solid var(--text-primary);
+}
+
+.home__section-title {
+  font-family: var(--font-serif);
+  font-size: var(--fs-24);
+  font-weight: 800;
+}
+
+.home__filter-clear {
+  background: none;
+  border: 0;
+  font-size: var(--fs-14);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.home__filter-clear:hover {
+  color: var(--accent);
+}
+
+.home__feed-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-8);
+}
+
+.home__more {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--sp-8);
+}
+
+.home__aside {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  position: sticky;
+  top: calc(var(--top-bar-height) + var(--sp-6));
+}
+
+@media (max-width: 1199px) {
+  .home__body {
+    gap: var(--sp-8);
+  }
+}
+
+@media (max-width: 899px) {
+  .home__body {
+    grid-template-columns: 1fr;
+  }
+  .home__feed-grid {
+    grid-template-columns: 1fr;
+    gap: var(--sp-6);
+  }
+  .home__aside {
+    position: static;
+  }
+}
+</style>

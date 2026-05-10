@@ -141,6 +141,59 @@ CREATE TABLE IF NOT EXISTS `history` (
     ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='浏览历史表';
 
+-- 评论表
+CREATE TABLE IF NOT EXISTS `comment` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '评论ID',
+  `news_id` INT UNSIGNED NOT NULL COMMENT '新闻ID',
+  `user_id` INT UNSIGNED NOT NULL COMMENT '评论者ID',
+  `parent_id` INT UNSIGNED NULL COMMENT '父评论ID，NULL 表示一级评论',
+  `root_id` INT UNSIGNED NULL COMMENT '所属一级评论ID，自身为根时等于自身ID',
+  `content` VARCHAR(1000) NOT NULL DEFAULT '' COMMENT '评论正文',
+  `like_count` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '点赞数（反规范化）',
+  `is_deleted` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否已删除（软删）',
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  INDEX `idx_news_root_created` (`news_id` ASC, `root_id` ASC, `created_at` ASC),
+  INDEX `fk_comment_user_idx` (`user_id` ASC),
+  INDEX `fk_comment_parent_idx` (`parent_id` ASC),
+  CONSTRAINT `fk_comment_news`
+    FOREIGN KEY (`news_id`)
+    REFERENCES `news` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_comment_user`
+    FOREIGN KEY (`user_id`)
+    REFERENCES `user` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_comment_parent`
+    FOREIGN KEY (`parent_id`)
+    REFERENCES `comment` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='评论表';
+
+-- 评论点赞表
+CREATE TABLE IF NOT EXISTS `comment_like` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '点赞ID',
+  `user_id` INT UNSIGNED NOT NULL COMMENT '用户ID',
+  `comment_id` INT UNSIGNED NOT NULL COMMENT '评论ID',
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '点赞时间',
+  PRIMARY KEY (`id`),
+  UNIQUE INDEX `uniq_user_comment` (`user_id` ASC, `comment_id` ASC),
+  INDEX `fk_comment_like_comment_idx` (`comment_id` ASC),
+  CONSTRAINT `fk_comment_like_user`
+    FOREIGN KEY (`user_id`)
+    REFERENCES `user` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE,
+  CONSTRAINT `fk_comment_like_comment`
+    FOREIGN KEY (`comment_id`)
+    REFERENCES `comment` (`id`)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='评论点赞表';
+
 -- AI聊天记录表（Agent）
 CREATE TABLE IF NOT EXISTS `ai_chat` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '聊天记录ID',

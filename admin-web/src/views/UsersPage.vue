@@ -1,129 +1,250 @@
 <template>
-  <div>
-    <div class="page-toolbar">
-      <div>
-        <h2 class="section-title">用户管理</h2>
-        <p class="section-copy">筛选账号并调整后台权限角色，前后台共用同一登录体系。</p>
-      </div>
-    </div>
+  <div class="users">
+    <PageToolbar>
+      <template #filters>
+        <el-input
+          v-model="filters.keyword"
+          placeholder="搜索用户名或邮箱"
+          clearable
+          size="default"
+          style="width: 240px"
+          @keydown.enter="onSearch"
+          @clear="onSearch"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
 
-    <section class="page-card page-table-card">
-      <el-form :inline="true" :model="filters" class="news-filter">
-        <el-form-item label="关键词">
-          <el-input v-model="filters.keyword" placeholder="用户名 / 昵称" clearable />
-        </el-form-item>
-        <el-form-item label="角色">
-          <el-select v-model="filters.role" placeholder="全部角色" clearable style="width: 160px">
-            <el-option label="普通用户" value="user" />
-            <el-option label="管理员" value="admin" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="handleSearch">筛选</el-button>
-          <el-button @click="handleReset">重置</el-button>
-        </el-form-item>
-      </el-form>
+        <el-select
+          v-model="filters.role"
+          placeholder="角色"
+          clearable
+          size="default"
+          style="width: 140px"
+          @change="onSearch"
+        >
+          <el-option label="全部" :value="null" />
+          <el-option label="管理员" value="admin" />
+          <el-option label="普通用户" value="user" />
+        </el-select>
+      </template>
+      <template #actions>
+        <span class="users__hint">共 {{ total }} 名用户</span>
+      </template>
+    </PageToolbar>
 
-      <el-table :data="users" stripe v-loading="loading">
-        <el-table-column prop="username" label="用户名" min-width="180" />
-        <el-table-column prop="nickname" label="昵称" min-width="180">
+    <div class="users__table page-card">
+      <el-table :data="list" v-loading="loading" stripe>
+        <el-table-column label="用户" min-width="220">
           <template #default="{ row }">
-            {{ row.nickname || '未设置昵称' }}
+            <div class="users__cell-user">
+              <span class="users__avatar">{{ initial(row) }}</span>
+              <div class="users__cell-text">
+                <strong>{{ row.username }}</strong>
+                <span v-if="row.nickname && row.nickname !== row.username">
+                  {{ row.nickname }}
+                </span>
+              </div>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column prop="createdAt" label="注册时间" min-width="200" />
-        <el-table-column label="角色" width="180">
+        <el-table-column prop="email" label="邮箱" width="220" />
+        <el-table-column label="角色" width="120">
           <template #default="{ row }">
-            <el-select :model-value="row.role" style="width: 140px" @change="(value) => handleRoleChange(row, value)">
-              <el-option label="普通用户" value="user" />
-              <el-option label="管理员" value="admin" />
-            </el-select>
+            <StatusChip :status="row.role" />
+          </template>
+        </el-table-column>
+        <el-table-column label="注册时间" width="180">
+          <template #default="{ row }">{{ formatDate(row.createdAt || row.registerTime) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="200" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              v-if="row.role === 'user'"
+              link
+              type="primary"
+              @click="onChangeRole(row, 'admin')"
+            >
+              提升为管理员
+            </el-button>
+            <el-button
+              v-else-if="row.role === 'admin'"
+              link
+              type="warning"
+              @click="onChangeRole(row, 'user')"
+            >
+              撤销管理员
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
 
-      <div class="pagination-row">
-        <span class="page-toolbar__meta">共 {{ pagination.total }} 条</span>
+      <div class="users__pagination">
         <el-pagination
           background
-          layout="prev, pager, next"
-          :current-page="pagination.page"
-          :page-size="pagination.pageSize"
-          :total="pagination.total"
-          @current-change="handlePageChange"
+          layout="total, prev, pager, next, sizes"
+          :total="total"
+          :current-page="page"
+          :page-size="pageSize"
+          :page-sizes="[10, 20, 50]"
+          @current-change="onPageChange"
+          @size-change="onSizeChange"
         />
       </div>
-    </section>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
+import {
+  ElButton,
+  ElIcon,
+  ElInput,
+  ElMessage,
+  ElMessageBox,
+  ElOption,
+  ElPagination,
+  ElSelect,
+  ElTable,
+  ElTableColumn
+} from 'element-plus'
+import { Search } from '@element-plus/icons-vue'
 
+import PageToolbar from '../components/common/PageToolbar.vue'
+import StatusChip from '../components/common/StatusChip.vue'
 import { fetchUsers, updateUserRole } from '../services/users.js'
 
+const list = ref([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(20)
 const loading = ref(false)
-const users = ref([])
 
 const filters = reactive({
   keyword: '',
-  role: '',
+  role: null
 })
 
-const pagination = reactive({
-  page: 1,
-  pageSize: 10,
-  total: 0,
-})
+const initial = (row) => (row.username || '?').slice(0, 1).toUpperCase()
 
-const loadUsers = async () => {
+const formatDate = (value) => {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+const load = async () => {
   loading.value = true
   try {
-    const payload = await fetchUsers({
-      page: pagination.page,
-      pageSize: pagination.pageSize,
-      keyword: filters.keyword,
-      role: filters.role,
+    const data = await fetchUsers({
+      page: page.value,
+      pageSize: pageSize.value,
+      keyword: filters.keyword || undefined,
+      role: filters.role || undefined
     })
-    users.value = payload.list || []
-    pagination.total = payload.total || 0
-  } catch (error) {
-    users.value = []
-    pagination.total = 0
-    ElMessage.error(error instanceof Error ? error.message : '用户加载失败')
+    list.value = data?.list || []
+    total.value = data?.total || 0
+  } catch (err) {
+    ElMessage.error(err?.message || '加载失败')
   } finally {
     loading.value = false
   }
 }
 
-const handleSearch = async () => {
-  pagination.page = 1
-  await loadUsers()
+const onSearch = () => {
+  page.value = 1
+  load()
 }
 
-const handleReset = async () => {
-  filters.keyword = ''
-  filters.role = ''
-  pagination.page = 1
-  await loadUsers()
+const onPageChange = (next) => {
+  page.value = next
+  load()
 }
 
-const handlePageChange = async (page) => {
-  pagination.page = page
-  await loadUsers()
+const onSizeChange = (size) => {
+  pageSize.value = size
+  page.value = 1
+  load()
 }
 
-const handleRoleChange = async (row, role) => {
+const onChangeRole = async (row, nextRole) => {
+  const action = nextRole === 'admin' ? '提升为管理员' : '撤销管理员权限'
   try {
-    await updateUserRole(row.id, role)
-    row.role = role
+    await ElMessageBox.confirm(
+      `确认将「${row.username}」${action}？此操作会立即生效。`,
+      '修改用户角色',
+      {
+        confirmButtonText: '确认',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+  } catch {
+    return
+  }
+  try {
+    await updateUserRole(row.id, nextRole)
     ElMessage.success('角色已更新')
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '角色更新失败')
-    await loadUsers()
+    load()
+  } catch (err) {
+    ElMessage.error(err?.message || '更新失败')
   }
 }
 
-onMounted(loadUsers)
+onMounted(load)
 </script>
+
+<style scoped>
+.users__hint {
+  font-size: var(--fs-13);
+  color: var(--text-secondary);
+}
+
+.users__table {
+  padding: var(--sp-3) var(--sp-3) var(--sp-4);
+}
+
+.users__cell-user {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+.users__avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: var(--fs-13);
+}
+
+.users__cell-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.users__cell-text strong {
+  font-size: var(--fs-14);
+  color: var(--text-primary);
+}
+
+.users__cell-text span {
+  font-size: var(--fs-12);
+  color: var(--text-muted);
+}
+
+.users__pagination {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--sp-3) var(--sp-2) 0;
+}
+</style>

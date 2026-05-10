@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
@@ -44,6 +46,31 @@ async def get_current_user(authorization: str=Header(..., alias="Authorization")
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效令牌或者令牌已过期")
     return  user
+
+
+async def get_optional_user(
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
+    db: AsyncSession = Depends(get_db_session),
+) -> Optional[User]:
+    """解析 Authorization 头，若有效返回用户，否则返回 None（不抛异常）。"""
+    if not authorization:
+        return None
+    parts = authorization.split(" ", 1)
+    if len(parts) != 2 or parts[0].lower() != "bearer" or not parts[1]:
+        return None
+    token = parts[1]
+    try:
+        payload = decode_access_token(token)
+        if payload.get("type") != "access":
+            return None
+        if await is_token_blacklisted(token):
+            return None
+        user_id = int(payload["sub"])
+    except (ValueError, TypeError):
+        return None
+
+    user = await users.get_user_by_id(user_id, db)
+    return user
 
 
 async def require_admin_user(

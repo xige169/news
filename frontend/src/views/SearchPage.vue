@@ -1,230 +1,318 @@
 <template>
-  <div class="page page-search">
-    <section class="hero-card hero-card--editorial">
-      <p class="eyebrow">Search Desk</p>
-      <h1 class="hero-title">搜索新闻主题与关键词</h1>
-      <p class="hero-subtitle">用关键词、分类和分页结果快速定位你关心的新闻线索。</p>
-    </section>
-
-    <section class="section-card">
-      <form class="search-panel" @submit.prevent="handleSearch">
-        <input
-          v-model.trim="keyword"
-          class="search-input"
-          type="search"
-          placeholder="输入关键词，例如 AI、芯片、国际局势"
+  <div class="search">
+    <header class="search__header">
+      <h1 class="search__title">搜索</h1>
+      <form class="search__form" @submit.prevent="onSubmit">
+        <n-input
+          v-model:value="keyword"
+          size="large"
+          placeholder="输入关键词搜索新闻"
+          clearable
         />
-        <button class="hero-button hero-button--primary click-effect" type="submit" :disabled="submitting">
-          {{ submitting ? '搜索中...' : '开始搜索' }}
-        </button>
+        <n-button type="primary" size="large" attr-type="submit">搜索</n-button>
       </form>
-      <div v-if="categories.length" class="category-grid">
+
+      <div v-if="history.length" class="search__history">
+        <span class="search__history-label">最近搜索</span>
         <button
-          class="category-chip click-effect"
-          :class="{ active: activeCategory === null }"
+          v-for="word in history"
+          :key="word"
           type="button"
-          @click="activeCategory = null"
+          class="search__history-chip"
+          @click="onHistoryClick(word)"
         >
-          全部
+          {{ word }}
         </button>
-        <button
-          v-for="item in categories"
+        <button type="button" class="search__history-clear" @click="clearHistory">
+          清空
+        </button>
+      </div>
+    </header>
+
+    <section v-if="hasSearched" class="search__results">
+      <header class="search__results-header">
+        <span>共找到 <strong>{{ total }}</strong> 条结果</span>
+      </header>
+
+      <div v-if="loading && !list.length" class="search__skeletons">
+        <LoadingSkeleton v-for="n in 4" :key="n" variant="row" />
+      </div>
+
+      <div v-else-if="list.length" class="search__list">
+        <NewsListRow
+          v-for="item in list"
           :key="item.id"
-          class="category-chip click-effect"
-          :class="{ active: activeCategory === item.id }"
-          type="button"
-          @click="activeCategory = item.id"
-        >
-          {{ item.name }}
-        </button>
+          :news="item"
+          :categories="categories"
+          :highlight="submittedKeyword"
+        />
+      </div>
+
+      <EmptyState
+        v-else
+        icon="🔍"
+        title="未找到相关新闻"
+        description="尝试更换关键词，或浏览首页推荐"
+      >
+        <router-link to="/">
+          <n-button>返回首页</n-button>
+        </router-link>
+      </EmptyState>
+
+      <div v-if="hasMore" class="search__more">
+        <n-button :loading="loadingMore" size="large" @click="loadMore">加载更多</n-button>
       </div>
     </section>
 
-    <section class="section-card">
-      <div class="section-header">
-        <h2>搜索结果</h2>
-        <span class="section-hint">{{ resultTotal }} 条结果</span>
-      </div>
-      <p v-if="submitting" class="preference-copy">正在搜索新闻...</p>
-      <p v-else-if="!hasSearched" class="preference-copy">输入关键词后开始搜索。</p>
-      <p v-else-if="results.length === 0" class="preference-copy">没有找到匹配结果，试试更宽泛的关键词。</p>
-      <div v-else class="news-list">
-        <article
-          v-for="item in results"
-          :key="item.id"
-          class="news-card click-effect"
-          @click="router.push(`/news/${item.id}`)"
-        >
-          <van-image
-            class="news-cover"
-            fit="cover"
-            radius="14"
-            :src="item.image"
-          />
-          <div class="news-copy">
-            <h3>{{ item.title }}</h3>
-            <p>{{ item.summary }}</p>
-            <div class="topic-tags" v-if="item.tags.length">
-              <span v-for="tag in item.tags" :key="tag" class="topic-tag">{{ tag }}</span>
-            </div>
-            <div class="news-meta">
-              <span>{{ item.source }}</span>
-              <span>{{ item.time }}</span>
-            </div>
-          </div>
-        </article>
-        <button
-          v-if="hasMore"
-          class="load-more-button click-effect"
-          type="button"
-          :disabled="loadingMore"
-          @click="loadMore"
-        >
-          {{ loadingMore ? '加载中...' : '加载更多结果' }}
-        </button>
-      </div>
+    <section v-else class="search__placeholder">
+      <EmptyState
+        icon="🔎"
+        title="搜索新闻"
+        description="输入关键词开始搜索"
+      />
     </section>
   </div>
 </template>
 
 <script setup>
-import { onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { showToast } from 'vant'
+import { NButton, NInput, useMessage } from 'naive-ui'
 
-import { fetchCategories, searchNews } from '../services/news.js'
-import { getNewsImageUrl } from '../utils/media.js'
-import { mergeNewsPage, resetPaginationState } from '../utils/news-pagination.js'
+import NewsListRow from '../components/news/NewsListRow.vue'
+import EmptyState from '../components/feedback/EmptyState.vue'
+import LoadingSkeleton from '../components/feedback/LoadingSkeleton.vue'
+import { fetchCategories, searchNews } from '../services/news'
+
+const HISTORY_KEY = 'news.search.history'
+const HISTORY_MAX = 10
 
 const route = useRoute()
 const router = useRouter()
+const message = useMessage()
 
+const keyword = ref('')
+const submittedKeyword = ref('')
 const categories = ref([])
-const keyword = ref(String(route.query.q || ''))
-const activeCategory = ref(route.query.categoryId ? Number(route.query.categoryId) : null)
-const results = ref([])
-const resultTotal = ref(0)
-const currentPage = ref(1)
-const hasMore = ref(false)
-const hasSearched = ref(Boolean(keyword.value))
-const submitting = ref(false)
+const history = ref([])
+
+const list = ref([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = 10
+const loading = ref(false)
 const loadingMore = ref(false)
+const hasSearched = ref(false)
+const hasMore = computed(() => list.value.length < total.value)
 
-const formatDate = (value) => {
-  if (!value) {
-    return '刚刚'
+const loadHistory = () => {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY)
+    history.value = raw ? JSON.parse(raw) : []
+  } catch {
+    history.value = []
   }
-
-  return new Date(value).toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  })
 }
 
-const formatNewsItem = (item) => ({
-  id: item.id,
-  title: item.title,
-  summary: item.summary || item.description || '暂无摘要',
-  image: getNewsImageUrl(item.image),
-  source: item.author || '未知来源',
-  time: formatDate(item.publishTime),
-  tags: item.tags || []
-})
-
-const runSearch = async (page = 1) => {
-  if (!keyword.value) {
-    results.value = []
-    resultTotal.value = 0
-    hasMore.value = false
-    hasSearched.value = false
-    return
+const saveHistory = (word) => {
+  if (!word) return
+  const next = [word, ...history.value.filter((w) => w !== word)].slice(0, HISTORY_MAX)
+  history.value = next
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(next))
+  } catch {
+    // ignore
   }
+}
 
-  hasSearched.value = true
-  if (page === 1) {
-    submitting.value = true
-  } else {
+const clearHistory = () => {
+  history.value = []
+  try {
+    localStorage.removeItem(HISTORY_KEY)
+  } catch {
+    // ignore
+  }
+}
+
+const runSearch = async ({ append = false } = {}) => {
+  const query = submittedKeyword.value.trim()
+  if (!query) return
+
+  if (append) {
     loadingMore.value = true
+  } else {
+    loading.value = true
+    list.value = []
+    page.value = 1
   }
 
   try {
-    const payload = await searchNews({
-      keyword: keyword.value,
-      categoryId: activeCategory.value,
-      page,
-      pageSize: 10
+    const data = await searchNews({
+      keyword: query,
+      page: page.value,
+      pageSize
     })
-    const nextState = mergeNewsPage(
-      {
-        items: results.value,
-        page: currentPage.value,
-        hasMore: hasMore.value
-      },
-      payload.list.map(formatNewsItem),
-      payload.hasMore,
-      page
-    )
-
-    results.value = nextState.items
-    currentPage.value = nextState.page
-    hasMore.value = nextState.hasMore
-    resultTotal.value = payload.total
-  } catch (error) {
-    showToast(error instanceof Error ? error.message : '搜索失败')
+    const next = data?.list || []
+    list.value = append ? [...list.value, ...next] : next
+    total.value = data?.total ?? list.value.length
+    hasSearched.value = true
+  } catch (err) {
+    message.error(err?.message || '搜索失败')
   } finally {
-    if (page === 1) {
-      submitting.value = false
-    } else {
-      loadingMore.value = false
-    }
+    loading.value = false
+    loadingMore.value = false
   }
 }
 
-const syncRouteQuery = () => {
-  router.replace({
-    path: '/search',
-    query: {
-      ...(keyword.value ? { q: keyword.value } : {}),
-      ...(activeCategory.value ? { categoryId: String(activeCategory.value) } : {})
-    }
-  })
+const onSubmit = () => {
+  const next = keyword.value.trim()
+  if (!next) return
+  router.replace({ path: '/search', query: { keyword: next } })
+  saveHistory(next)
+  submittedKeyword.value = next
+  runSearch()
 }
 
-const handleSearch = async () => {
-  const resetState = resetPaginationState()
-  results.value = resetState.items
-  currentPage.value = resetState.page
-  hasMore.value = resetState.hasMore
-  syncRouteQuery()
-  await runSearch(1)
+const onHistoryClick = (word) => {
+  keyword.value = word
+  router.replace({ path: '/search', query: { keyword: word } })
+  submittedKeyword.value = word
+  runSearch()
 }
 
 const loadMore = async () => {
-  if (!hasMore.value || loadingMore.value) {
-    return
-  }
-  await runSearch(currentPage.value + 1)
+  page.value += 1
+  await runSearch({ append: true })
 }
 
-watch(activeCategory, async () => {
-  if (!hasSearched.value) {
-    return
-  }
-  await handleSearch()
-})
-
-onMounted(async () => {
+const loadCategories = async () => {
   try {
-    categories.value = await fetchCategories()
-  } catch (error) {
-    showToast(error instanceof Error ? error.message : '分类加载失败')
+    const data = await fetchCategories()
+    categories.value = Array.isArray(data) ? data : data?.list || []
+  } catch {
+    categories.value = []
   }
+}
 
-  if (keyword.value) {
-    await runSearch(1)
-  }
+watch(
+  () => route.query.keyword,
+  (raw) => {
+    const next = typeof raw === 'string' ? raw.trim() : ''
+    keyword.value = next
+    submittedKeyword.value = next
+    if (next) {
+      runSearch()
+    } else {
+      list.value = []
+      hasSearched.value = false
+      total.value = 0
+    }
+  },
+  { immediate: true }
+)
+
+onMounted(() => {
+  loadHistory()
+  loadCategories()
 })
 </script>
+
+<style scoped>
+.search {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.search__header {
+  margin-bottom: var(--sp-8);
+  padding-bottom: var(--sp-6);
+  border-bottom: 1px solid var(--border);
+}
+
+.search__title {
+  font-family: var(--font-serif);
+  font-size: var(--fs-36);
+  margin-bottom: var(--sp-5);
+}
+
+.search__form {
+  display: flex;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-5);
+}
+
+.search__history {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.search__history-label {
+  font-size: var(--fs-12);
+  color: var(--text-muted);
+  margin-right: var(--sp-2);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.search__history-chip {
+  background: var(--bg-elevated);
+  border: 0;
+  padding: var(--sp-1) var(--sp-3);
+  border-radius: 999px;
+  font-size: var(--fs-13, 13px);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.search__history-chip:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.search__history-clear {
+  background: none;
+  border: 0;
+  color: var(--text-muted);
+  font-size: var(--fs-12);
+  cursor: pointer;
+  margin-left: var(--sp-2);
+}
+
+.search__history-clear:hover {
+  color: var(--accent);
+}
+
+.search__results-header {
+  margin-bottom: var(--sp-3);
+  color: var(--text-secondary);
+  font-size: var(--fs-14);
+}
+
+.search__results-header strong {
+  color: var(--accent);
+  margin: 0 var(--sp-1);
+}
+
+.search__list {
+  display: flex;
+  flex-direction: column;
+}
+
+.search__skeletons {
+  display: flex;
+  flex-direction: column;
+}
+
+.search__more {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--sp-8);
+}
+
+.search__placeholder {
+  padding: var(--sp-12) 0;
+}
+</style>
