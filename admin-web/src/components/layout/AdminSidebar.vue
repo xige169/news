@@ -41,6 +41,7 @@
 import { markRaw } from 'vue'
 import { useRoute } from 'vue-router'
 import {
+  ChatDotRound,
   DataAnalysis,
   Document,
   EditPen,
@@ -57,6 +58,7 @@ const items = [
     children: [
       { label: '新闻列表', path: '/news', icon: markRaw(Document) },
       { label: '栏目管理', path: '/categories', icon: markRaw(Folder) },
+      { label: '评论管理', path: '/comments', icon: markRaw(ChatDotRound) },
       { label: '新建稿件', path: '/news/create', icon: markRaw(EditPen), exact: true }
     ]
   },

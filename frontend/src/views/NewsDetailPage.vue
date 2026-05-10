@@ -47,6 +47,8 @@
 
       <div class="detail__body prose" v-html="renderedContent" />
 
+      <CommentSection v-if="news?.id" :news-id="news.id" />
+
       <section v-if="related.length" class="detail__related">
         <header class="detail__related-header">
           <h2 class="detail__related-title">相关推荐</h2>
@@ -103,6 +105,7 @@ import DOMPurify from 'dompurify'
 import { NButton, NModal, useMessage } from 'naive-ui'
 
 import NewsCard from '../components/news/NewsCard.vue'
+import CommentSection from '../components/news/CommentSection.vue'
 import EmptyState from '../components/feedback/EmptyState.vue'
 import LoadingSkeleton from '../components/feedback/LoadingSkeleton.vue'
 import {
