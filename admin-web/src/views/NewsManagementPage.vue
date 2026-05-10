@@ -1,222 +1,306 @@
 <template>
-  <div>
-    <div class="page-toolbar">
-      <div>
-        <h2 class="section-title">新闻管理</h2>
-        <p class="section-copy">标准后台视图管理稿件筛选、编辑、上下线与删除。</p>
-      </div>
-      <el-button type="primary" @click="router.push('/news/create')">新建新闻</el-button>
-    </div>
+  <div class="news-mgmt">
+    <PageToolbar>
+      <template #filters>
+        <el-input
+          v-model="filters.keyword"
+          placeholder="搜索标题或作者"
+          clearable
+          size="default"
+          style="width: 240px"
+          @keydown.enter="onSearch"
+          @clear="onSearch"
+        >
+          <template #prefix>
+            <el-icon><Search /></el-icon>
+          </template>
+        </el-input>
 
-    <section class="page-card page-table-card">
-      <el-form :inline="true" :model="filters" class="news-filter">
-        <el-form-item label="关键词">
-          <el-input v-model="filters.keyword" placeholder="标题 / 简介 / 作者" clearable />
-        </el-form-item>
-        <el-form-item label="状态">
-          <el-select v-model="filters.status" placeholder="全部状态" clearable style="width: 140px">
-            <el-option label="草稿" value="draft" />
-            <el-option label="已发布" value="published" />
-            <el-option label="已下线" value="offline" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="分类">
-          <el-select v-model="filters.categoryId" placeholder="全部分类" clearable style="width: 160px">
-            <el-option v-for="item in categories" :key="item.id" :label="item.name" :value="item.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="handleSearch">筛选</el-button>
-          <el-button @click="handleReset">重置</el-button>
-        </el-form-item>
-      </el-form>
+        <el-select
+          v-model="filters.status"
+          placeholder="状态"
+          clearable
+          size="default"
+          style="width: 140px"
+          @change="onSearch"
+        >
+          <el-option label="已发布" value="published" />
+          <el-option label="草稿" value="draft" />
+          <el-option label="已下线" value="offline" />
+        </el-select>
 
-      <el-table :data="newsList" stripe v-loading="loading">
-        <el-table-column label="稿件" min-width="380">
+        <el-select
+          v-model="filters.categoryId"
+          placeholder="栏目"
+          clearable
+          size="default"
+          style="width: 160px"
+          @change="onSearch"
+        >
+          <el-option
+            v-for="item in categories"
+            :key="item.id"
+            :label="item.name"
+            :value="item.id"
+          />
+        </el-select>
+      </template>
+
+      <template #actions>
+        <el-button type="primary" @click="$router.push('/news/create')">
+          <el-icon><Plus /></el-icon>
+          新建稿件
+        </el-button>
+      </template>
+
+      <template v-if="selection.length" #bulk>
+        <span>已选中 <strong>{{ selection.length }}</strong> 条</span>
+        <el-button size="small" @click="onBulkStatus('published')">批量发布</el-button>
+        <el-button size="small" @click="onBulkStatus('offline')">批量下线</el-button>
+        <el-button size="small" type="danger" plain @click="onBulkDelete">批量删除</el-button>
+        <el-button size="small" link @click="clearSelection">清除选择</el-button>
+      </template>
+    </PageToolbar>
+
+    <div class="news-mgmt__table page-card">
+      <el-table
+        ref="tableRef"
+        :data="list"
+        v-loading="loading"
+        stripe
+        @selection-change="onSelectionChange"
+      >
+        <el-table-column type="selection" width="44" />
+        <el-table-column label="标题" min-width="280">
           <template #default="{ row }">
-            <div class="news-row">
-              <img v-if="row.image" :src="row.image" alt="" class="list-cover" />
-              <div class="title-cell">
-                <strong>{{ row.title }}</strong>
-                <span>{{ row.summary || row.description || '暂无摘要' }}</span>
-              </div>
-            </div>
+            <router-link :to="`/news/${row.id}/edit`" class="news-mgmt__title-link">
+              {{ row.title }}
+            </router-link>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="120">
+        <el-table-column label="栏目" width="130">
+          <template #default="{ row }">{{ categoryName(row.categoryId) }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="110">
           <template #default="{ row }">
-            <span class="status-chip" :class="`status-chip--${row.status}`">
-              {{ statusTextMap[row.status] || row.status }}
-            </span>
+            <StatusChip :status="row.status" />
           </template>
         </el-table-column>
-        <el-table-column label="分类" width="120">
-          <template #default="{ row }">
-            {{ categoryMap.get(row.categoryId) || `#${row.categoryId}` }}
-          </template>
+        <el-table-column prop="author" label="作者" width="120" />
+        <el-table-column prop="views" label="浏览" width="80" align="right" />
+        <el-table-column label="更新时间" width="160">
+          <template #default="{ row }">{{ formatDate(row.updatedAt || row.publishTime) }}</template>
         </el-table-column>
-        <el-table-column prop="views" label="浏览量" width="110" />
-        <el-table-column label="推荐位" width="100">
+        <el-table-column label="操作" width="220" fixed="right">
           <template #default="{ row }">
-            <el-tag :type="row.isFeatured ? 'danger' : 'info'">{{ row.isFeatured ? '是' : '否' }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="操作" width="320" fixed="right">
-          <template #default="{ row }">
-            <el-space wrap>
-              <el-button link type="primary" @click="router.push(`/news/${row.id}/edit`)">编辑</el-button>
-              <el-button link @click="handleStatusChange(row, row.status === 'published' ? 'offline' : 'published')">
-                {{ row.status === 'published' ? '下线' : '发布' }}
-              </el-button>
-              <el-button link type="danger" @click="handleDelete(row)">删除</el-button>
-            </el-space>
+            <el-button link type="primary" @click="$router.push(`/news/${row.id}/edit`)">
+              编辑
+            </el-button>
+            <el-button v-if="row.status !== 'published'" link @click="onChangeStatus(row, 'published')">
+              发布
+            </el-button>
+            <el-button v-else link @click="onChangeStatus(row, 'offline')">
+              下线
+            </el-button>
+            <el-popconfirm title="确认删除该稿件？" @confirm="onDelete(row)">
+              <template #reference>
+                <el-button link type="danger">删除</el-button>
+              </template>
+            </el-popconfirm>
           </template>
         </el-table-column>
       </el-table>
 
-      <div class="pagination-row">
-        <span class="page-toolbar__meta">共 {{ pagination.total }} 条</span>
+      <div class="news-mgmt__pagination">
         <el-pagination
           background
-          layout="prev, pager, next"
-          :current-page="pagination.page"
-          :page-size="pagination.pageSize"
-          :total="pagination.total"
-          @current-change="handlePageChange"
+          layout="total, prev, pager, next, sizes"
+          :total="total"
+          :current-page="page"
+          :page-size="pageSize"
+          :page-sizes="[10, 20, 50]"
+          @current-change="onPageChange"
+          @size-change="onSizeChange"
         />
       </div>
-    </section>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { onMounted, reactive, ref } from 'vue'
+import {
+  ElButton,
+  ElIcon,
+  ElInput,
+  ElMessage,
+  ElMessageBox,
+  ElOption,
+  ElPagination,
+  ElPopconfirm,
+  ElSelect,
+  ElTable,
+  ElTableColumn
+} from 'element-plus'
+import { Plus, Search } from '@element-plus/icons-vue'
 
+import PageToolbar from '../components/common/PageToolbar.vue'
+import StatusChip from '../components/common/StatusChip.vue'
 import { fetchCategories } from '../services/categories.js'
-import { deleteNews, fetchNewsList, updateNewsStatus } from '../services/news.js'
+import {
+  deleteNews,
+  fetchNewsList,
+  updateNewsStatus
+} from '../services/news.js'
 
-const router = useRouter()
+const list = ref([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(20)
 const loading = ref(false)
 const categories = ref([])
-const newsList = ref([])
+const selection = ref([])
+const tableRef = ref(null)
 
 const filters = reactive({
   keyword: '',
-  status: '',
-  categoryId: '',
+  status: null,
+  categoryId: null
 })
 
-const pagination = reactive({
-  page: 1,
-  pageSize: 10,
-  total: 0,
-})
+const categoryName = (id) => categories.value.find((c) => c.id === id)?.name || '-'
 
-const statusTextMap = {
-  published: '已发布',
-  draft: '草稿',
-  offline: '已下线',
+const formatDate = (value) => {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
 }
 
-const categoryMap = computed(() => new Map(categories.value.map((item) => [item.id, item.name])))
-
-const loadCategories = async () => {
-  categories.value = await fetchCategories()
-}
-
-const loadNews = async () => {
+const load = async () => {
   loading.value = true
   try {
-    const payload = await fetchNewsList({
-      page: pagination.page,
-      pageSize: pagination.pageSize,
-      keyword: filters.keyword,
-      status: filters.status,
-      categoryId: filters.categoryId,
+    const data = await fetchNewsList({
+      page: page.value,
+      pageSize: pageSize.value,
+      keyword: filters.keyword || undefined,
+      status: filters.status || undefined,
+      categoryId: filters.categoryId || undefined
     })
-    newsList.value = payload.list || []
-    pagination.total = payload.total || 0
-  } catch (error) {
-    newsList.value = []
-    pagination.total = 0
-    ElMessage.error(error instanceof Error ? error.message : '新闻列表加载失败')
+    list.value = data?.list || []
+    total.value = data?.total || 0
+  } catch (err) {
+    ElMessage.error(err?.message || '加载失败')
   } finally {
     loading.value = false
   }
 }
 
-const handleSearch = async () => {
-  pagination.page = 1
-  await loadNews()
+const onSearch = () => {
+  page.value = 1
+  load()
 }
 
-const handleReset = async () => {
-  filters.keyword = ''
-  filters.status = ''
-  filters.categoryId = ''
-  pagination.page = 1
-  await loadNews()
+const onPageChange = (next) => {
+  page.value = next
+  load()
 }
 
-const handlePageChange = async (page) => {
-  pagination.page = page
-  await loadNews()
+const onSizeChange = (size) => {
+  pageSize.value = size
+  page.value = 1
+  load()
 }
 
-const handleStatusChange = async (row, nextStatus) => {
+const onSelectionChange = (rows) => {
+  selection.value = rows
+}
+
+const clearSelection = () => {
+  tableRef.value?.clearSelection()
+}
+
+const onChangeStatus = async (row, nextStatus) => {
   try {
     await updateNewsStatus(row.id, nextStatus)
-    ElMessage.success(nextStatus === 'published' ? '稿件已发布' : '稿件已下线')
-    await loadNews()
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '状态更新失败')
+    ElMessage.success('已更新')
+    load()
+  } catch (err) {
+    ElMessage.error(err?.message || '操作失败')
   }
 }
 
-const handleDelete = async (row) => {
+const onDelete = async (row) => {
   try {
-    await ElMessageBox.confirm(`确认删除《${row.title}》吗？`, '删除确认', {
+    await deleteNews(row.id)
+    ElMessage.success('已删除')
+    load()
+  } catch (err) {
+    ElMessage.error(err?.message || '删除失败')
+  }
+}
+
+const onBulkStatus = async (nextStatus) => {
+  if (!selection.value.length) return
+  try {
+    await Promise.all(selection.value.map((row) => updateNewsStatus(row.id, nextStatus)))
+    ElMessage.success('已批量更新')
+    clearSelection()
+    load()
+  } catch (err) {
+    ElMessage.error(err?.message || '批量更新失败')
+  }
+}
+
+const onBulkDelete = async () => {
+  if (!selection.value.length) return
+  try {
+    await ElMessageBox.confirm(`确认删除选中的 ${selection.value.length} 条稿件？`, '危险操作', {
       confirmButtonText: '删除',
       cancelButtonText: '取消',
-      type: 'warning',
+      type: 'warning'
     })
-    await deleteNews(row.id)
-    ElMessage.success('新闻已删除')
-    await loadNews()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error(error instanceof Error ? error.message : '删除失败')
-    }
+  } catch {
+    return
+  }
+  try {
+    await Promise.all(selection.value.map((row) => deleteNews(row.id)))
+    ElMessage.success('已删除')
+    clearSelection()
+    load()
+  } catch (err) {
+    ElMessage.error(err?.message || '批量删除失败')
   }
 }
 
 onMounted(async () => {
   try {
-    await loadCategories()
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '分类加载失败')
+    const data = await fetchCategories()
+    categories.value = Array.isArray(data) ? data : data?.list || []
+  } catch {
+    categories.value = []
   }
-  await loadNews()
+  load()
 })
 </script>
 
 <style scoped>
-.news-filter {
-  margin-bottom: 20px;
+.news-mgmt__table {
+  padding: var(--sp-3) var(--sp-3) var(--sp-4);
 }
 
-.news-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
+.news-mgmt__title-link {
+  color: var(--text-primary);
+  font-weight: 500;
 }
 
-.pagination-row {
+.news-mgmt__title-link:hover {
+  color: var(--accent);
+}
+
+.news-mgmt__pagination {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 18px;
+  justify-content: flex-end;
+  padding: var(--sp-3) var(--sp-2) 0;
 }
 </style>
