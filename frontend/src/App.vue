@@ -1,52 +1,33 @@
 <template>
-  <div class="app">
-    <router-view v-slot="{ Component }">
-      <template v-if="$route.meta.keepAlive">
-        <keep-alive>
-          <component :is="Component" />
-        </keep-alive>
-      </template>
-      <template v-else>
-        <component :is="Component" />
-      </template>
-    </router-view>
-    <TabBar v-if="$route.meta.showTabBar" />
-  </div>
+  <n-config-provider :theme-overrides="themeOverrides">
+    <n-message-provider>
+      <n-dialog-provider>
+        <n-loading-bar-provider>
+          <AppShell />
+        </n-loading-bar-provider>
+      </n-dialog-provider>
+    </n-message-provider>
+  </n-config-provider>
 </template>
 
 <script setup>
-import TabBar from './components/TabBar.vue'
-</script>
+import {
+  NConfigProvider,
+  NDialogProvider,
+  NLoadingBarProvider,
+  NMessageProvider
+} from 'naive-ui'
 
-<style>
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+import AppShell from './components/layout/AppShell.vue'
 
-html, body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-    Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  font-size: 16px;
-  background-color: #f7f8fa;
-  color: #333;
-  height: 100%;
-  width: 100%;
-}
-
-.app {
-  max-width: 750px;
-  margin: 0 auto;
-  height: 100%;
-}
-
-/* 移动端适配 */
-@media screen and (max-width: 750px) {
-  html {
-    font-size: calc(100vw / 750 * 16);
+const themeOverrides = {
+  common: {
+    primaryColor: '#b3261e',
+    primaryColorHover: '#8e1c17',
+    primaryColorPressed: '#7a1812',
+    primaryColorSuppl: '#b3261e',
+    borderRadius: '8px',
+    fontFamily: "'Inter', 'PingFang SC', system-ui, sans-serif"
   }
 }
-</style>
+</script>

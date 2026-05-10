@@ -19,9 +19,7 @@ const routes = [
     name: 'home',
     component: HomePage,
     meta: {
-      title: '首页',
-      showTabBar: true
-    }
+      title: '首页'    }
   },
   {
     path: '/news/:id',
@@ -36,9 +34,7 @@ const routes = [
     name: 'search',
     component: SearchPage,
     meta: {
-      title: '搜索',
-      showTabBar: true
-    }
+      title: '搜索'    }
   },
   {
     path: '/login',
@@ -64,9 +60,7 @@ const routes = [
     component: FavoritesPage,
     meta: {
       title: '我的收藏',
-      requiresAuth: true,
-      showTabBar: true
-    }
+      requiresAuth: true    }
   },
   {
     path: '/history',
@@ -74,9 +68,7 @@ const routes = [
     component: HistoryPage,
     meta: {
       title: '浏览历史',
-      requiresAuth: true,
-      showTabBar: true
-    }
+      requiresAuth: true    }
   },
   {
     path: '/profile',
@@ -84,9 +76,7 @@ const routes = [
     component: ProfilePage,
     meta: {
       title: '个人中心',
-      requiresAuth: true,
-      showTabBar: true
-    }
+      requiresAuth: true    }
   },
   {
     path: '/profile/edit',
